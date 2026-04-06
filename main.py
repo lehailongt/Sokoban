@@ -1,6 +1,7 @@
 import sys, pygame, time
 from constants import *
 from IDA_star import IDAStarSolver
+from sokoban_game import SokobanGame
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -36,7 +37,7 @@ images = {
     'player': load_image('player.png', COLORS['player']),
     'player_on_goal': load_image('player_on_goal.png', COLORS['player_on_goal']),
     'box': load_image('box.png', COLORS['box']),
-    'box_on_goal': load_image('box.png', COLORS['box_on_goal']),
+    'box_on_goal': load_image('box_on_goal.png', COLORS['box_on_goal']),
     'goal': load_image('goal.png', COLORS['goal']),
     'background': load_image('background.jpg', COLORS['background']),
     'other': load_image('', COLORS['other'])
@@ -90,9 +91,10 @@ def draw_map(board):
     update_screen()
 
 def draw_init_screen():
-    # Vẽ background
-    screen.blit(images['background'], (0, 0))
-    
+    """Vẽ màn hình ban đầu chạy chương trình"""
+    # Vẽ backgroud
+    screen.fill(BLACK)
+
     # Vẽ title
     title = font.render("SOKOBAN GAME", True, GRAY)
     screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 50))
@@ -109,13 +111,12 @@ def draw_init_screen():
     screen.blit(algorithm_text, (WIDTH // 2 - algorithm_text.get_width() // 2, HEIGHT - 80))
     
     # Hướng dẫn
-    help_text = small_font.render("LEFT/RIGHT: Change Level | ENTER: Start | R: Reset", True, WHITE)
+    help_text = small_font.render("LEFT/RIGHT: Change Level | ENTER: Start | R: Reset | Q: Quit | P: Play", True, WHITE)
     screen.blit(help_text, (WIDTH // 2 - help_text.get_width() // 2, HEIGHT - 40))
     update_screen()
 
 def draw_loading_screen():
     """Vẽ màn hình loading"""
-    screen.blit(images['background'], (0, 0))
     loading_text = font.render("LOADING...", True, (255, 255, 0))
     screen.blit(loading_text, (WIDTH // 2 - loading_text.get_width() // 2, HEIGHT // 2))
     
@@ -136,6 +137,45 @@ def draw_level_number():
     screen.blit(level_text, rect)
     update_screen()
 
+def draw_text(content, y, color):
+    text = font.render(content, True, color)
+    text_x = (WIDTH - text.get_width()) // 2
+    text_y = y
+    text_width = text.get_width()
+    text_height = text.get_height()
+    rect = (text_x, text_y, text_width, text_height)
+    # Xóa thông tin level cũ
+    pygame.draw.rect(screen, BLACK, rect)
+    # Vẽ thông tin level mới
+    screen.blit(text, rect)
+    update_screen()
+
+def draw_player_win(step_count):
+    draw_text(f"Player is winner....", HEIGHT - 200, WHITE)
+    draw_text(f"STEP COUNT: {step_count}", HEIGHT - 180, WHITE)
+
+def draw_solution(solution):
+    step_count = len(solution) - 1
+    step_count_text = font.render(f"STEP COUNT: {step_count}", True, WHITE)
+    text_x = (WIDTH - step_count_text.get_width()) // 2
+    text_y = 70
+    text_width = step_count_text.get_width()
+    text_height = step_count_text.get_height()
+    rect = (text_x, text_y, text_width, text_height)
+    # Vẽ thông tin level mới
+    screen.blit(step_count_text, rect)
+    update_screen()
+    for board in solution:
+        draw_map(board)
+        wait_time()
+    # Xóa thông tin STEP cũ
+    pygame.draw.rect(screen, BLACK, rect)
+
+def update_level_number(new_level_number):
+    global level_number
+    level_number = new_level_number
+    draw_level_number()
+    draw_map(parse_level(level_number))
 
 def main():
 
@@ -152,19 +192,44 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RIGHT:
                     if level_number < len(LEVELS) - 1:
-                        level_number += 1
-                        draw_level_number()
-                        draw_map(parse_level(level_number))
+                        update_level_number(level_number + 1)
                 elif event.key == pygame.K_LEFT:
                     if level_number > 0:
-                        level_number -= 1
-                        draw_level_number()
-                        draw_map(parse_level(level_number))
+                        update_level_number(level_number - 1)
                 elif event.key == pygame.K_r: # R
                     level_number = 0
                     draw_init_screen()
                 elif event.key == pygame.K_q: # q
                     running = False
+                elif event.key == pygame.K_p: # P
+                    print("PLAYER>>>>>>>>")
+                    pygame.event.clear()
+                    draw_text("Can You Win???", 70, WHITE)
+                    board = parse_level(level_number)
+                    game = SokobanGame(board)
+                    playing = True
+                    while playing:
+                        for event in pygame.event.get():
+                            if event.type == pygame.QUIT:
+                                pygame.quit()
+                                sys.exit()
+                            elif event.type == pygame.KEYDOWN:
+                                if event.key == pygame.K_RIGHT:
+                                    game.move('right')
+                                elif event.key == pygame.K_LEFT:
+                                    game.move('left')
+                                elif event.key == pygame.K_UP:
+                                    game.move('up')
+                                elif event.key == pygame.K_DOWN:
+                                    game.move('down')
+                                elif event.key == pygame.K_e:
+                                    playing = False
+                                draw_map(game.board)
+                            if game.check_win():
+                                draw_player_win(game.step_count)
+                                pygame.event.clear()
+                    draw_init_screen()
+                        
                 elif event.key == pygame.K_RETURN: # Enter
                     draw_loading_screen()
 
@@ -176,14 +241,8 @@ def main():
                         continue
                     
                     solution = solver.get_solution()
-                    for board in solution:
-                        draw_map(board)
-                        wait_time()
-                    
-                    # 👇 THÊM ĐOẠN NÀY ĐỂ DỌN BỘ NHỚ
-                    pygame.event.clear()  # Xóa hết sự kiện phím đang chờ
-                    solver = None  # Xóa solver giải phóng bộ nhớ
-                    solution = None  # Xóa solution
+                    draw_solution(solution)
+                    pygame.event.clear()
             
             update_screen()  
 

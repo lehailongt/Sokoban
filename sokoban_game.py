@@ -7,6 +7,7 @@ class SokobanGame:
         self.cols = len(self.board[0])
         self.goals = self.find_goals()
         self.player_pos = self.find_player()
+        self.step_count = 0
 
     def find_player(self):
         for i in range(self.rows):
@@ -45,6 +46,7 @@ class SokobanGame:
         return False
     
     def move(self, direction):
+        self.step_count += 1
         px, py = self.player_pos
         dx, dy = DIRECTIONS[direction]
         nx, ny = px + dx, py + dy
