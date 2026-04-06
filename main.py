@@ -2,6 +2,7 @@ import sys, pygame, time
 from constants import *
 from IDA_star import IDAStarSolver
 from sokoban_game import SokobanGame
+from ultils import *
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -16,20 +17,6 @@ clock = pygame.time.Clock()
 level_number = 0
 algorithm = "IDA* Algorithm"
 
-
-def load_image(filename, default_color):
-    """Load ảnh từ file"""
-    try:
-        path = f"images/{filename}"
-        image = pygame.image.load(path).convert_alpha()
-        return pygame.transform.scale(image, (CELL_SIZE, CELL_SIZE))
-    except:
-        # Tạo surface màu thay thế
-        surface = pygame.Surface((CELL_SIZE, CELL_SIZE))
-        surface.fill(default_color)
-        pygame.draw.rect(surface, (255, 255, 255), surface.get_rect(), 2)
-        return surface
-
 # Load hình ảnh
 images = {
     'wall': load_image('wall.png', COLORS['wall']),
@@ -42,13 +29,6 @@ images = {
     'background': load_image('background.jpg', COLORS['background']),
     'other': load_image('', COLORS['other'])
 }
-
-def parse_level(level_number):
-    """Chuyển map kí tự: mảng text -> mảng 2 chiều từng kí tự"""
-    level_data = LEVELS[level_number]
-    
-    board = [list(row) for row in level_data]
-    return board
 
 def update_screen():
     pygame.display.flip()
@@ -82,8 +62,10 @@ def draw_map(board):
                 screen.blit(images['box'], (x, y))
             elif cell == BOX_ON_GOAL:
                 screen.blit(images['box_on_goal'], (x, y))
-            elif cell in [PLAYER, PLAYER_ON_GOAL]:
+            elif cell == PLAYER:
                 screen.blit(images['player'], (x, y))
+            elif cell == PLAYER_ON_GOAL:
+                screen.blit(images['player_on_goal'], (x, y))
             elif cell == GOAL:
                 screen.blit(images['goal'], (x, y))
             else:
@@ -104,7 +86,7 @@ def draw_init_screen():
     draw_map(board)
     
     # Vẽ level
-    draw_level_number()
+    draw_text(f"Level {level_number + 1} / {len(LEVELS)}", HEIGHT - 120, WHITE, BLACK)
 
     # Vẽ thông tin algorithm
     algorithm_text = font.render(f"Algorithm: {algorithm}", True, WHITE)
@@ -124,35 +106,22 @@ def draw_loading_screen():
     screen.blit(solving_text, (WIDTH // 2 - solving_text.get_width() // 2, HEIGHT // 2 + 40))
     update_screen()
 
-def draw_level_number():
-    level_text = font.render(f"Level {level_number + 1} / {len(LEVELS)}", True, WHITE)
-    text_x = (WIDTH - level_text.get_width()) // 2
-    text_y = HEIGHT - 120
-    text_width = level_text.get_width()
-    text_height = level_text.get_height()
-    rect = (text_x, text_y, text_width, text_height)
-    # Xóa thông tin level cũ
-    pygame.draw.rect(screen, BLACK, rect)
-    # Vẽ thông tin level mới
-    screen.blit(level_text, rect)
-    update_screen()
-
-def draw_text(content, y, color):
-    text = font.render(content, True, color)
+def draw_text(content, y, color_text, background):
+    text = font.render(content, True, color_text)
     text_x = (WIDTH - text.get_width()) // 2
     text_y = y
     text_width = text.get_width()
     text_height = text.get_height()
     rect = (text_x, text_y, text_width, text_height)
-    # Xóa thông tin level cũ
-    pygame.draw.rect(screen, BLACK, rect)
-    # Vẽ thông tin level mới
+    # Tạo màu background 
+    pygame.draw.rect(screen, background, rect)
+    # Vẽ thông tin nội dung hiện thị
     screen.blit(text, rect)
     update_screen()
 
 def draw_player_win(step_count):
-    draw_text(f"Player is winner....", HEIGHT - 200, WHITE)
-    draw_text(f"STEP COUNT: {step_count}", HEIGHT - 180, WHITE)
+    draw_text(f"Player is winner....", HEIGHT - 200, WHITE, BLACK)
+    draw_text(f"STEP COUNT: {step_count}", HEIGHT - 170, WHITE, BLACK)
 
 def draw_solution(solution):
     step_count = len(solution) - 1
@@ -168,13 +137,11 @@ def draw_solution(solution):
     for board in solution:
         draw_map(board)
         wait_time()
-    # Xóa thông tin STEP cũ
-    pygame.draw.rect(screen, BLACK, rect)
 
 def update_level_number(new_level_number):
     global level_number
     level_number = new_level_number
-    draw_level_number()
+    draw_text(f"Level {level_number + 1} / {len(LEVELS)}", HEIGHT - 120, WHITE, BLACK)
     draw_map(parse_level(level_number))
 
 def main():
@@ -202,10 +169,13 @@ def main():
                 elif event.key == pygame.K_q: # q
                     running = False
                 elif event.key == pygame.K_p: # P
-                    print("PLAYER>>>>>>>>")
                     pygame.event.clear()
-                    draw_text("Can You Win???", 70, WHITE)
+
+                    draw_text("Can You Win???", 70, WHITE, BLACK)
+                    draw_text(f"Press E to exit game", 100, WHITE, BLACK)
+
                     board = parse_level(level_number)
+                    draw_map(board)
                     game = SokobanGame(board)
                     playing = True
                     while playing:
@@ -243,9 +213,12 @@ def main():
                     solution = solver.get_solution()
                     draw_solution(solution)
                     pygame.event.clear()
-            
-            update_screen()  
+                    # Đợi 1 phím bất kì được nhấn
+                    while not any(pygame.key.get_pressed()): pygame.event.pump()
+                    draw_init_screen()
 
+        update_screen()
+         
     pygame.quit()
     sys.exit()
 

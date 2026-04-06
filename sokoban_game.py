@@ -46,7 +46,6 @@ class SokobanGame:
         return False
     
     def move(self, direction):
-        self.step_count += 1
         px, py = self.player_pos
         dx, dy = DIRECTIONS[direction]
         nx, ny = px + dx, py + dy
@@ -62,12 +61,9 @@ class SokobanGame:
         # Kiểm tra thùng
         if self.board[nx][ny] in [BOX, BOX_ON_GOAL]:
             nnx, nny = nx + dx, ny + dy
-           
-            # Thùng sát biên
-            if not self.position_on_board(nnx, nny):
-                return False
-           
-            # 2 thùng cạnh nhau
+
+
+            # 2 thùng cạnh nhau hoặc sát tường
             if self.board[nnx][nny] in [WALL, BOX, BOX_ON_GOAL]:
                 return False
             
@@ -90,20 +86,19 @@ class SokobanGame:
             else:
                 self.board[nx][ny] = PLAYER
             
-            self.player_pos = (nx, ny)
-            return True
-        
         # Di chuyển bình thường
-        if self.board[px][py] == PLAYER_ON_GOAL:
-            self.board[px][py] = GOAL
         else:
-            self.board[px][py] = FLOOR
-        
-        if self.board[nx][ny] == GOAL:
-            self.board[nx][ny] = PLAYER_ON_GOAL
-        else:
-            self.board[nx][ny] = PLAYER
-        
+            if self.board[px][py] == PLAYER_ON_GOAL:
+                self.board[px][py] = GOAL
+            else:
+                self.board[px][py] = FLOOR
+            
+            if self.board[nx][ny] == GOAL:
+                self.board[nx][ny] = PLAYER_ON_GOAL
+            else:
+                self.board[nx][ny] = PLAYER
+            
         self.player_pos = (nx, ny)
+        self.step_count += 1
         return True
     

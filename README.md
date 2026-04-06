@@ -2,3 +2,5 @@
 - Ứng dụng thuật toán IDA* giải trò chơi sokoban
 # Công cụ
 - Thư viện Pygame
+```
+pip install pygame
