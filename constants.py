@@ -1,0 +1,150 @@
+# CELL_SIZE = 5
+# ROW, COLUMN = 20, 30
+# WIDTH, HEIGHT = CELL_SIZE * ROW, CELL_SIZE * COLUMN
+# TILE = 48
+# FPS = 60
+
+WHITE = (255,255,255)
+BLACK = (0,0,0)
+GRAY = (128,128,128)
+GREEN = (0,255,0)
+BLUE = (0,0,255)
+RED = (255,0,0)
+YELLOW = (255,255,0)
+NAVY = (0,0,128)
+
+# import pygame
+
+# Kích thước màn hình
+WIDTH = 800
+HEIGHT = 600
+
+# Kích thước mỗi ô
+CELL_SIZE = 48
+
+# Số hàng và cột mặc định
+ROWS = 12
+COLS = 16
+
+INF = float('inf')
+
+# Thời gian cho mỗi bước thuật toán chạy giải
+STEP_TIME = 500
+
+# Bước nhảy
+STEP_BETA = 2
+
+# Màu sắc dự phòng (nếu không có ảnh)
+COLORS = {
+    'wall': GRAY,
+    'floor': WHITE,
+    'player': GREEN,
+    'player_on_goal': GREEN,
+    'box': RED,
+    'box_on_goal': BLUE,
+    'goal': YELLOW,
+    'background': BLACK,
+    'other': NAVY
+}
+
+
+# Ký tự trong file map
+WALL = '#'
+FLOOR = ' '
+PLAYER = '@'
+PLAYER_ON_GOAL = '+'
+BOX = '$'
+BOX_ON_GOAL = '%'
+GOAL = '.'
+
+# Hướng di chuyển
+DIRECTIONS = {
+    'up': (-1, 0),
+    'down': (1, 0),
+    'left': (0, -1),
+    'right': (0, 1)
+}
+
+# Danh sách các level mẫu (dạng text)
+LEVELS = [
+    # Level 0
+    [
+        "##########",
+        "#        #",
+        "#        #",
+        "#  @$.   #",
+        "#        #",
+        "#        #",
+        "##########"
+    ],
+    # Level 1
+    [
+        "##########",
+        "#        #",
+        "#   $    #",
+        "#  @     #",
+        "#   .    #",
+        "#        #",
+        "##########"
+    ],
+    # Level 2
+    [
+        "##########",
+        "#   .    #",
+        "#   $    #",
+        "#   @    #",
+        "#        #",
+        "#        #",
+        "##########"
+    ],
+    # Level 3
+    [
+        "############",
+        "#          #",
+        "#    .     #",
+        "#  $       #",
+        "#  @       #",
+        "#          #",
+        "############"
+    ],
+    # Level 4
+    [
+        "##########",
+        "#        #",
+        "#   $$   #",
+        "#  @     #",
+        "#   ..   #",
+        "#        #",
+        "##########"
+    ],
+    # Level 5
+    [
+        "##########",
+        "#        #",
+        "#   $$   #",
+        "#  @##   #",
+        "#   ..   #",
+        "#        #",
+        "##########"
+    ],
+    # Level 6
+    [
+        "##########",
+        "#        #",
+        "#   $$#  #",
+        "#  @#    #",
+        "#   ..   #",
+        "#        #",
+        "##########"
+    ],
+    # Level 7
+    [
+        "############",
+        "#          #",
+        "#          #",
+        "# +    #$  #",
+        "#          #",
+        "#          #",
+        "############"
+    ],
+]
