@@ -4,3 +4,16 @@
 - Thư viện Pygame
 ```
 pip install pygame
+```
+
+## Chạy chương trình
+```bash
+python main.py
+```
+
+## Điều khiển
+- `LEFT/RIGHT`: đổi level
+- `ENTER`: chạy solver IDA* (push-based)
+- `P`: chơi thủ công
+- `R`: reset level
+- `Q`: thoát

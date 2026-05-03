@@ -1,25 +1,26 @@
+from functools import lru_cache
+
 from constants import *
 
+
 class Node:
-    def __init__(self, state, g):
+    def __init__(self, state, g, parent=None):
         self.state = state
         self.rows = len(self.state)
-        self.cols = len(self.state[0])
+        self.cols = len(self.state[0]) if self.rows else 0
         self.boxes = self.find_boxes()
         self.goals = self.find_goals()
         self.player_pos = self.find_player()
         self.node_key = self.get_state_key()
-        self.pre_node_key = None
+        self.parent = parent
         self.g = g
         self.h = self.heuristic()
-        self.f = self.g + self.h
-   
-    # Nếu muốn chính xác hơn (bao gồm player)
+        self.f = self.g + self.h if self.h != INF else INF
+
     def get_state_key(self):
-        """Tạo key duy nhất cho trạng thái"""
+        """Tạo key duy nhất cho trạng thái."""
         return (tuple(sorted(self.boxes)), self.player_pos)
-        # [(x1,y1), (x2,y2), ..., (playerx, playery)] -> ((x1,y1), (x2,y2), ..., (playerx, playery))
-   
+
     def find_boxes(self):
         boxes = []
         for i in range(self.rows):
@@ -27,7 +28,7 @@ class Node:
                 if self.state[i][j] in [BOX, BOX_ON_GOAL]:
                     boxes.append((i, j))
         return boxes
-    
+
     def find_goals(self):
         goals = []
         for i in range(self.rows):
@@ -35,7 +36,7 @@ class Node:
                 if self.state[i][j] in [GOAL, BOX_ON_GOAL, PLAYER_ON_GOAL]:
                     goals.append((i, j))
         return goals
-    
+
     def find_player(self):
         for i in range(self.rows):
             for j in range(self.cols):
@@ -44,92 +45,72 @@ class Node:
         return (0, 0)
 
     def heuristic(self):
-        """Hàm heuristic: tổng khoảng cách Manhattan từ mỗi thùng đến đích"""
-        boxes = self.boxes[:]
-        goals = self.goals[:]
-        boxes.sort()
-        goals.sort()
+        """Heuristic chấp nhận được: ghép tối thiểu giữa thùng và đích.
 
-        total_distance = 0
-        for i in range(len(boxes)):
-            total_distance += abs(boxes[i][0] - goals[i][0]) + abs(boxes[i][1] - goals[i][1])
-                
-        return total_distance
-        
+        Lưu ý: hiện dùng DP bitmask để tính ghép tối thiểu (độ phức tạp O(n * 2^n)),
+        phù hợp khi số thùng nhỏ. Đây là lower-bound cho số lần đẩy (push) còn lại.
+        """
+        if not self.boxes:
+            return 0
+
+        if len(self.goals) < len(self.boxes):
+            return INF
+
+        boxes = tuple(sorted(self.boxes))
+        goals = tuple(sorted(self.goals))
+
+        @lru_cache(maxsize=None)
+        def match(box_index, used_mask):
+            if box_index == len(boxes):
+                return 0
+
+            bx, by = boxes[box_index]
+            best = INF
+
+            for goal_index, (gx, gy) in enumerate(goals):
+                if used_mask & (1 << goal_index):
+                    continue
+
+                tail = match(box_index + 1, used_mask | (1 << goal_index))
+                if tail == INF:
+                    continue
+
+                cost = abs(bx - gx) + abs(by - gy) + tail
+                if cost < best:
+                    best = cost
+
+            return best
+
+        return match(0, 0)
+
     def is_goal_node(self):
-        """Kiểm tra xem đã thắng chưa"""
+        """Kiểm tra xem đã thắng chưa."""
         for i in range(self.rows):
             for j in range(self.cols):
                 if self.state[i][j] == BOX:
                     return False
         return True
-        
-    def position_on_board(self, x, y):
-        """Kiểm tra 1 tọa độ có nằm trong map trò chơi không"""
-        if x > 1 and x < self.rows and y > 1 or y < self.cols:
-            return True
+
+    def is_deadlocked(self):
+        """Deadlock cơ bản: box không nằm trên goal và bị kẹt ở góc tường."""
+        goal_set = set(self.goals)
+
+        for x, y in self.boxes:
+            if (x, y) in goal_set:
+                continue
+
+            up_wall = self.state[x - 1][y] == WALL
+            down_wall = self.state[x + 1][y] == WALL
+            left_wall = self.state[x][y - 1] == WALL
+            right_wall = self.state[x][y + 1] == WALL
+
+            if (
+                (up_wall and left_wall)
+                or (up_wall and right_wall)
+                or (down_wall and left_wall)
+                or (down_wall and right_wall)
+            ):
+                return True
+
         return False
-    
-    def next(self, direction):
-        """Tìm trạng thái tiếp theo với hướng di chuyển"""
-        px, py = self.find_player()
-        dx, dy = DIRECTIONS[direction]
-        nx, ny = px + dx, py + dy
-        
-        # Kiểm tra biên
-        if not self.position_on_board(nx, ny):
-            return None
-        
-        board = [row[:] for row in self.state]
-
-        # Kiểm tra tường
-        if board[nx][ny] == WALL:
-            return None
-        
-        # Di chuyển đẩy thùng
-        if board[nx][ny] in [BOX, BOX_ON_GOAL]:
-            nnx, nny = nx + dx, ny + dy
-           
-            # Thùng sát biên
-            if not self.position_on_board(nnx, nny):
-                return None
-           
-            # 2 thùng cạnh nhau
-            if board[nnx][nny] in [WALL, BOX, BOX_ON_GOAL]:
-                return None
-            
-            # Đẩy thùng
-            # Xóa vị trí cũ của người
-            if board[px][py] == PLAYER_ON_GOAL:
-                board[px][py] = GOAL
-            else:
-                board[px][py] = FLOOR
-            
-            # Di chuyển thùng
-            if board[nnx][nny] == GOAL:
-                board[nnx][nny] = BOX_ON_GOAL
-            else:
-                board[nnx][nny] = BOX
-            
-            # Di chuyển người
-            if board[nx][ny] == BOX_ON_GOAL:
-                board[nx][ny] = PLAYER_ON_GOAL
-            else:
-                board[nx][ny] = PLAYER
-
-        # Di chuyển bình thường
-        else:
-            if board[px][py] == PLAYER_ON_GOAL:
-                board[px][py] = GOAL
-            else:
-                board[px][py] = FLOOR
-            
-            if board[nx][ny] == GOAL:
-                board[nx][ny] = PLAYER_ON_GOAL
-            else:
-                board[nx][ny] = PLAYER
-            
-        node = Node(board, self.g + 1)
-        node.pre_node_key = self.node_key
-        return node
-        
+        # Di chuyển thùng

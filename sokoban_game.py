@@ -1,5 +1,6 @@
 from constants import *
 
+
 class SokobanGame:
     def __init__(self, board):
         self.board = board
@@ -15,7 +16,7 @@ class SokobanGame:
                 if self.board[i][j] in [PLAYER, PLAYER_ON_GOAL]:
                     return (i, j)
         return (0, 0)
-    
+
     def find_boxes(self):
         boxes = []
         for i in range(self.rows):
@@ -23,7 +24,7 @@ class SokobanGame:
                 if self.board[i][j] in [BOX, BOX_ON_GOAL]:
                     boxes.append((i, j))
         return boxes
-    
+
     def find_goals(self):
         goals = []
         for i in range(self.rows):
@@ -38,67 +39,65 @@ class SokobanGame:
                 if self.board[i][j] == BOX:
                     return False
         return True
-    
+
     def position_on_board(self, x, y):
         """Kiểm tra 1 tọa độ có nằm trong map trò chơi không"""
-        if x > 1 and x < self.rows and y > 1 or y < self.cols:
-            return True
-        return False
-    
+        # Sửa: kiểm tra biên chuẩn để tránh truy cập ngoài mảng
+        # Trước đây điều kiện sai khiến một số toạ độ ngoài board được coi là hợp lệ
+        return 0 <= x < self.rows and 0 <= y < self.cols
+
     def move(self, direction):
         px, py = self.player_pos
         dx, dy = DIRECTIONS[direction]
         nx, ny = px + dx, py + dy
-        
+
         # Kiểm tra biên
         if not self.position_on_board(nx, ny):
             return False
-        
+
         # Kiểm tra tường
         if self.board[nx][ny] == WALL:
             return False
-        
+
         # Kiểm tra thùng
         if self.board[nx][ny] in [BOX, BOX_ON_GOAL]:
             nnx, nny = nx + dx, ny + dy
 
-
             # 2 thùng cạnh nhau hoặc sát tường
             if self.board[nnx][nny] in [WALL, BOX, BOX_ON_GOAL]:
                 return False
-            
+
             # Đẩy thùng
             # Xóa vị trí cũ của người
             if self.board[px][py] == PLAYER_ON_GOAL:
                 self.board[px][py] = GOAL
             else:
                 self.board[px][py] = FLOOR
-            
+
             # Di chuyển thùng
             if self.board[nnx][nny] == GOAL:
                 self.board[nnx][nny] = BOX_ON_GOAL
             else:
                 self.board[nnx][nny] = BOX
-            
+
             # Di chuyển người
             if self.board[nx][ny] == BOX_ON_GOAL:
                 self.board[nx][ny] = PLAYER_ON_GOAL
             else:
                 self.board[nx][ny] = PLAYER
-            
+
         # Di chuyển bình thường
         else:
             if self.board[px][py] == PLAYER_ON_GOAL:
                 self.board[px][py] = GOAL
             else:
                 self.board[px][py] = FLOOR
-            
+
             if self.board[nx][ny] == GOAL:
                 self.board[nx][ny] = PLAYER_ON_GOAL
             else:
                 self.board[nx][ny] = PLAYER
-            
+
         self.player_pos = (nx, ny)
         self.step_count += 1
         return True
-    

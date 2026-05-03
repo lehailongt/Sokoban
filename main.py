@@ -1,4 +1,7 @@
-import sys, pygame, time
+import sys
+
+import pygame
+
 from constants import *
 from IDA_star import IDAStarSolver
 from sokoban_game import SokobanGame
@@ -19,25 +22,28 @@ algorithm = "IDA* Algorithm"
 
 # Load hình ảnh
 images = {
-    'wall': load_image('wall.png', COLORS['wall']),
-    'floor': load_image('floor.png', COLORS['floor']),
-    'player': load_image('player.png', COLORS['player']),
-    'player_on_goal': load_image('player_on_goal.png', COLORS['player_on_goal']),
-    'box': load_image('box.png', COLORS['box']),
-    'box_on_goal': load_image('box_on_goal.png', COLORS['box_on_goal']),
-    'goal': load_image('goal.png', COLORS['goal']),
-    'background': load_image('background.jpg', COLORS['background']),
-    'other': load_image('', COLORS['other'])
+    "wall": load_image("wall.png", COLORS["wall"]),
+    "floor": load_image("floor.png", COLORS["floor"]),
+    "player": load_image("player.png", COLORS["player"]),
+    "player_on_goal": load_image("player_on_goal.png", COLORS["player_on_goal"]),
+    "box": load_image("box.png", COLORS["box"]),
+    "box_on_goal": load_image("box_on_goal.png", COLORS["box_on_goal"]),
+    "goal": load_image("goal.png", COLORS["goal"]),
+    "background": load_image("background.jpg", COLORS["background"]),
+    "other": load_image("", COLORS["other"]),
 }
+
 
 def update_screen():
     pygame.display.flip()
     clock.tick(60)
 
+
 def wait_time():
     """Chờ mà không làm đơ game"""
     pygame.time.delay(STEP_TIME)  # delay trực tiếp
     pygame.event.pump()  # Xử lý sự kiện sau delay
+
 
 def draw_map(board):
     board_width = len(board[0]) * CELL_SIZE
@@ -48,29 +54,36 @@ def draw_map(board):
     # Xóa map cũ (FUll khối cả chiều dài witdh)
     rect = pygame.Rect(0, offset_y, WIDTH, board_height)
     pygame.draw.rect(screen, BLACK, rect)
-    
+
     for i, row in enumerate(board):
         for j, cell in enumerate(row):
             x = offset_x + j * CELL_SIZE
             y = offset_y + i * CELL_SIZE
-
+            # Vẽ ô tương ứng với ký tự trên board.
+            # Lưu ý: `BOX` và `BOX_ON_GOAL` là hai ký tự khác nhau.
             if cell == WALL:
-                screen.blit(images['wall'], (x, y))
+                screen.blit(images["wall"], (x, y))
             elif cell == FLOOR:
-                screen.blit(images['floor'], (x, y))
-            elif cell in BOX:
-                screen.blit(images['box'], (x, y))
+                screen.blit(images["floor"], (x, y))
+            elif cell == BOX:
+                screen.blit(images["box"], (x, y))
             elif cell == BOX_ON_GOAL:
-                screen.blit(images['box_on_goal'], (x, y))
+                screen.blit(images["box_on_goal"], (x, y))
             elif cell == PLAYER:
-                screen.blit(images['player'], (x, y))
+                screen.blit(images["player"], (x, y))
             elif cell == PLAYER_ON_GOAL:
-                screen.blit(images['player_on_goal'], (x, y))
+                screen.blit(images["player_on_goal"], (x, y))
             elif cell == GOAL:
-                screen.blit(images['goal'], (x, y))
+                screen.blit(images["goal"], (x, y))
             else:
-                screen.blit(images['other'], (x, y))
+                screen.blit(images["other"], (x, y))
     update_screen()
+
+
+def draw_no_solution():
+    # Hiển thị thông báo khi solver báo không có lời giải.
+    draw_text("NO SOLUTION", HEIGHT - 200, YELLOW, BLACK)
+
 
 def draw_init_screen():
     """Vẽ màn hình ban đầu chạy chương trình"""
@@ -84,27 +97,39 @@ def draw_init_screen():
     # Vẽ map hiện thị
     board = parse_level(level_number)
     draw_map(board)
-    
+
     # Vẽ level
     draw_text(f"Level {level_number + 1} / {len(LEVELS)}", HEIGHT - 120, WHITE, BLACK)
 
     # Vẽ thông tin algorithm
     algorithm_text = font.render(f"Algorithm: {algorithm}", True, WHITE)
-    screen.blit(algorithm_text, (WIDTH // 2 - algorithm_text.get_width() // 2, HEIGHT - 80))
-    
+    screen.blit(
+        algorithm_text, (WIDTH // 2 - algorithm_text.get_width() // 2, HEIGHT - 80)
+    )
+
     # Hướng dẫn
-    help_text = small_font.render("LEFT/RIGHT: Change Level | ENTER: Start | R: Reset | Q: Quit | P: Play", True, WHITE)
+    help_text = small_font.render(
+        "LEFT/RIGHT: Change Level | ENTER: Start | R: Reset | Q: Quit | P: Play",
+        True,
+        WHITE,
+    )
     screen.blit(help_text, (WIDTH // 2 - help_text.get_width() // 2, HEIGHT - 40))
     update_screen()
+
 
 def draw_loading_screen():
     """Vẽ màn hình loading"""
     loading_text = font.render("LOADING...", True, (255, 255, 0))
     screen.blit(loading_text, (WIDTH // 2 - loading_text.get_width() // 2, HEIGHT // 2))
-    
-    solving_text = small_font.render("Solving with IDA* algorithm...", True, (200, 200, 200))
-    screen.blit(solving_text, (WIDTH // 2 - solving_text.get_width() // 2, HEIGHT // 2 + 40))
+
+    solving_text = small_font.render(
+        "Solving with IDA* algorithm...", True, (200, 200, 200)
+    )
+    screen.blit(
+        solving_text, (WIDTH // 2 - solving_text.get_width() // 2, HEIGHT // 2 + 40)
+    )
     update_screen()
+
 
 def draw_text(content, y, color_text, background):
     text = font.render(content, True, color_text)
@@ -113,19 +138,24 @@ def draw_text(content, y, color_text, background):
     text_width = text.get_width()
     text_height = text.get_height()
     rect = (text_x, text_y, text_width, text_height)
-    # Tạo màu background 
+    # Tạo màu background
     pygame.draw.rect(screen, background, rect)
     # Vẽ thông tin nội dung hiện thị
     screen.blit(text, rect)
     update_screen()
 
+
 def draw_player_win(step_count):
     draw_text(f"Player is winner....", HEIGHT - 200, WHITE, BLACK)
     draw_text(f"STEP COUNT: {step_count}", HEIGHT - 170, WHITE, BLACK)
 
+
 def draw_solution(solution):
-    step_count = len(solution) - 1
-    step_count_text = font.render(f"STEP COUNT: {step_count}", True, WHITE)
+    # `solution` là danh sách các trạng thái board từ bắt đầu đến kết thúc,
+    # với mỗi bước chuyển là một push (do solver dạng push-based), nên số lần
+    # đẩy = len(solution) - 1.
+    push_count = len(solution) - 1
+    step_count_text = font.render(f"PUSH COUNT: {push_count}", True, WHITE)
     text_x = (WIDTH - step_count_text.get_width()) // 2
     text_y = 70
     text_width = step_count_text.get_width()
@@ -138,18 +168,20 @@ def draw_solution(solution):
         draw_map(board)
         wait_time()
 
+
 def update_level_number(new_level_number):
     global level_number
     level_number = new_level_number
     draw_text(f"Level {level_number + 1} / {len(LEVELS)}", HEIGHT - 120, WHITE, BLACK)
     draw_map(parse_level(level_number))
 
+
 def main():
 
     global level_number, algorithm
     running = True
     draw_init_screen()
-    print("draw_init_screen") 
+    print("draw_init_screen")
 
     while running:
         # Xử lý sự kiện
@@ -163,12 +195,12 @@ def main():
                 elif event.key == pygame.K_LEFT:
                     if level_number > 0:
                         update_level_number(level_number - 1)
-                elif event.key == pygame.K_r: # R
+                elif event.key == pygame.K_r:  # R
                     level_number = 0
                     draw_init_screen()
-                elif event.key == pygame.K_q: # q
+                elif event.key == pygame.K_q:  # q
                     running = False
-                elif event.key == pygame.K_p: # P
+                elif event.key == pygame.K_p:  # P
                     pygame.event.clear()
 
                     draw_text("Can You Win???", 70, WHITE, BLACK)
@@ -185,13 +217,13 @@ def main():
                                 sys.exit()
                             elif event.type == pygame.KEYDOWN:
                                 if event.key == pygame.K_RIGHT:
-                                    game.move('right')
+                                    game.move("right")
                                 elif event.key == pygame.K_LEFT:
-                                    game.move('left')
+                                    game.move("left")
                                 elif event.key == pygame.K_UP:
-                                    game.move('up')
+                                    game.move("up")
                                 elif event.key == pygame.K_DOWN:
-                                    game.move('down')
+                                    game.move("down")
                                 elif event.key == pygame.K_e:
                                     playing = False
                                 draw_map(game.board)
@@ -199,28 +231,33 @@ def main():
                                 draw_player_win(game.step_count)
                                 pygame.event.clear()
                     draw_init_screen()
-                        
-                elif event.key == pygame.K_RETURN: # Enter
+
+                elif event.key == pygame.K_RETURN:  # Enter
                     draw_loading_screen()
 
                     board = parse_level(level_number)
                     solver = IDAStarSolver(board)
                     solver.solve()
                     if solver.end_node == None:
-                        print("No Solution")
+                        draw_no_solution()
+                        while not any(pygame.key.get_pressed()):
+                            pygame.event.pump()
+                        draw_init_screen()
                         continue
-                    
+
                     solution = solver.get_solution()
                     draw_solution(solution)
                     pygame.event.clear()
                     # Đợi 1 phím bất kì được nhấn
-                    while not any(pygame.key.get_pressed()): pygame.event.pump()
+                    while not any(pygame.key.get_pressed()):
+                        pygame.event.pump()
                     draw_init_screen()
 
         update_screen()
-         
+
     pygame.quit()
     sys.exit()
+
 
 if __name__ == "__main__":
     main()
