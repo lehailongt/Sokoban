@@ -41,8 +41,14 @@ def update_screen():
 
 def wait_time():
     """Chờ mà không làm đơ game"""
-    pygame.time.delay(STEP_TIME)  # delay trực tiếp
-    pygame.event.pump()  # Xử lý sự kiện sau delay
+    start = pygame.time.get_ticks()
+    # Sửa lỗi đơ game: Dùng vòng lặp kiểm tra sự kiện liên tục để game không bị treo khi chờ
+    while pygame.time.get_ticks() - start < STEP_TIME:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+        pygame.time.delay(10)
 
 
 def draw_map(board):
@@ -83,6 +89,8 @@ def draw_map(board):
 def draw_no_solution():
     # Hiển thị thông báo khi solver báo không có lời giải.
     draw_text("NO SOLUTION", HEIGHT - 200, YELLOW, BLACK)
+    # Thêm dòng chữ hướng dẫn người chơi bấm phím để tiếp tục
+    draw_text("Press ANY KEY to continue", HEIGHT - 160, WHITE, BLACK)
 
 
 def draw_init_screen():
@@ -148,25 +156,20 @@ def draw_text(content, y, color_text, background):
 def draw_player_win(step_count):
     draw_text(f"Player is winner....", HEIGHT - 200, WHITE, BLACK)
     draw_text(f"STEP COUNT: {step_count}", HEIGHT - 170, WHITE, BLACK)
+    # Thêm dòng chữ hướng dẫn người chơi thoát game khi thắng
+    draw_text("Press ANY KEY to exit", HEIGHT - 140, WHITE, BLACK)
 
 
 def draw_solution(solution):
-    # `solution` là danh sách các trạng thái board từ bắt đầu đến kết thúc,
-    # với mỗi bước chuyển là một push (do solver dạng push-based), nên số lần
-    # đẩy = len(solution) - 1.
-    push_count = len(solution) - 1
-    step_count_text = font.render(f"PUSH COUNT: {push_count}", True, WHITE)
-    text_x = (WIDTH - step_count_text.get_width()) // 2
-    text_y = 70
-    text_width = step_count_text.get_width()
-    text_height = step_count_text.get_height()
-    rect = (text_x, text_y, text_width, text_height)
-    # Vẽ thông tin level mới
-    screen.blit(step_count_text, rect)
-    update_screen()
+    # Sửa lỗi: Đổi PUSH COUNT thành STEP COUNT do danh sách solution giờ đã chứa cả bước đi bộ
+    step_count = len(solution) - 1
     for board in solution:
         draw_map(board)
+        # Sửa lỗi đè text: Chuyển lệnh in text vào trong vòng lặp để vẽ lại sau mỗi lần map bị xóa đi vẽ lại
+        draw_text(f"STEP COUNT: {step_count}", 20, WHITE, BLACK)
         wait_time()
+    # Thêm hướng dẫn bấm phím khi đã vẽ xong kết quả
+    draw_text("Press ANY KEY to continue", HEIGHT - 50, WHITE, BLACK)
 
 
 def update_level_number(new_level_number):
@@ -229,7 +232,19 @@ def main():
                                 draw_map(game.board)
                             if game.check_win():
                                 draw_player_win(game.step_count)
+                                # Sửa lỗi kẹt vòng lặp: Đợi người dùng nhấn phím để thoát màn hình Win thay vì lặp vô hạn
+                                waiting = True
                                 pygame.event.clear()
+                                while waiting:
+                                    for ev in pygame.event.get():
+                                        if ev.type == pygame.QUIT:
+                                            pygame.quit()
+                                            sys.exit()
+                                        elif ev.type == pygame.KEYDOWN:
+                                            waiting = False
+                                            playing = False
+                                    pygame.time.delay(50)
+                                break
                     draw_init_screen()
 
                 elif event.key == pygame.K_RETURN:  # Enter
@@ -240,17 +255,34 @@ def main():
                     solver.solve()
                     if solver.end_node == None:
                         draw_no_solution()
-                        while not any(pygame.key.get_pressed()):
-                            pygame.event.pump()
+                        # Sửa lỗi trôi phím: Xóa các event cũ và đợi sự kiện bấm phím MỚI xuất hiện
+                        pygame.event.clear()
+                        waiting = True
+                        while waiting:
+                            for ev in pygame.event.get():
+                                if ev.type == pygame.QUIT:
+                                    pygame.quit()
+                                    sys.exit()
+                                elif ev.type == pygame.KEYDOWN:
+                                    waiting = False
+                            pygame.time.delay(50)
                         draw_init_screen()
                         continue
 
                     solution = solver.get_solution()
                     draw_solution(solution)
+                    
+                    # Sửa lỗi trôi phím: Xóa các event cũ (như phím Enter giữ quá lâu) và đợi sự kiện mới
                     pygame.event.clear()
-                    # Đợi 1 phím bất kì được nhấn
-                    while not any(pygame.key.get_pressed()):
-                        pygame.event.pump()
+                    waiting = True
+                    while waiting:
+                        for ev in pygame.event.get():
+                            if ev.type == pygame.QUIT:
+                                pygame.quit()
+                                sys.exit()
+                            elif ev.type == pygame.KEYDOWN:
+                                waiting = False
+                        pygame.time.delay(50)
                     draw_init_screen()
 
         update_screen()

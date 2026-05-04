@@ -18,8 +18,23 @@ class Node:
         self.f = self.g + self.h if self.h != INF else INF
 
     def get_state_key(self):
-        """Tạo key duy nhất cho trạng thái."""
-        return (tuple(sorted(self.boxes)), self.player_pos)
+        """Tạo key duy nhất cho trạng thái. Tối ưu: Lấy điểm trên cùng bên trái của vùng di chuyển được làm đại diện."""
+        from collections import deque
+        reachable = set()
+        queue = deque([self.player_pos])
+        reachable.add(self.player_pos)
+        
+        while queue:
+            x, y = queue.popleft()
+            for dx, dy in DIRECTIONS.values():
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < self.rows and 0 <= ny < self.cols:
+                    if (nx, ny) not in reachable and self.state[nx][ny] not in [WALL, BOX, BOX_ON_GOAL]:
+                        reachable.add((nx, ny))
+                        queue.append((nx, ny))
+                        
+        normalized_player_pos = min(reachable)
+        return (tuple(sorted(self.boxes)), normalized_player_pos)
 
     def find_boxes(self):
         boxes = []

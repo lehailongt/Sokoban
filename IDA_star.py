@@ -41,6 +41,34 @@ class IDAStarSolver:
 
         return reachable
 
+    def _find_walk_path(self, board, start_pos, target_pos):
+        """Sửa lỗi tốc biến: Tìm đường đi bộ (BFS) ngắn nhất từ start_pos đến target_pos mà không đẩy thùng"""
+        if start_pos == target_pos:
+            return []
+
+        queue = deque([(start_pos, [])])
+        visited = {start_pos}
+
+        while queue:
+            (x, y), path = queue.popleft()
+
+            for dx, dy in DIRECTIONS.values():
+                nx, ny = x + dx, y + dy
+                if not self._in_bounds(nx, ny):
+                    continue
+                if (nx, ny) in visited:
+                    continue
+                if board[nx][ny] in [WALL, BOX, BOX_ON_GOAL]:
+                    continue
+
+                new_path = path + [(nx, ny)]
+                if (nx, ny) == target_pos:
+                    return new_path
+
+                visited.add((nx, ny))
+                queue.append(((nx, ny), new_path))
+        return []
+
     def _generate_children(self, node):
         # Sinh các nút con bằng cách liệt kê các push hợp lệ.
         # Với mỗi thùng, xét 4 hướng: nếu người chơi có thể tới ô phía sau thùng
@@ -72,7 +100,7 @@ class IDAStarSolver:
                     PLAYER_ON_GOAL if board[bx][by] == BOX_ON_GOAL else PLAYER
                 )
                 board[target_spot[0]][target_spot[1]] = (
-                    BOX_ON_GOAL if target_cell == GOAL else BOX
+                    BOX_ON_GOAL if target_cell in [GOAL, PLAYER_ON_GOAL] else BOX
                 )
 
                 child = Node(board, node.g + 1, parent=node)
@@ -154,16 +182,54 @@ class IDAStarSolver:
             print(f"Tăng ngưỡng lên: {threshold}")
 
     def get_solution(self):
-        """Trả về list board từ start đến end."""
+        """Trả về list board từ start đến end, bao gồm cả các bước đi bộ."""
         if self.end_node is None:
             return []
 
-        state_list = []
+        node_list = []
         node = self.end_node
 
         while node is not None:
-            state_list.append(node.state)
+            node_list.append(node)
             node = node.parent
 
-        state_list.reverse()
+        node_list.reverse()
+
+        state_list = [node_list[0].state]
+
+        for i in range(len(node_list) - 1):
+            parent = node_list[i]
+            child = node_list[i + 1]
+
+            # Sửa lỗi tốc biến: Tìm xem cái thùng nào vừa bị đẩy từ parent sang child
+            old_boxes = set(parent.boxes)
+            new_boxes = set(child.boxes)
+            
+            diff_old = old_boxes - new_boxes
+            diff_new = new_boxes - old_boxes
+            if diff_old and diff_new:
+                moved_box_old = list(diff_old)[0]
+                moved_box_new = list(diff_new)[0]
+                
+                # Tính toán hướng đẩy (dx, dy) và vị trí người chơi CẦN ĐỨNG để đẩy cái thùng đó
+                dx = moved_box_new[0] - moved_box_old[0]
+                dy = moved_box_new[1] - moved_box_old[1]
+                player_spot = (moved_box_old[0] - dx, moved_box_old[1] - dy)
+
+                # Sinh ra các trạng thái (frame) diễn tả cảnh người chơi đi bộ tới player_spot
+                walk_path = self._find_walk_path(parent.state, parent.player_pos, player_spot)
+                
+                curr_px, curr_py = parent.player_pos
+                for wx, wy in walk_path:
+                    new_board = [row[:] for row in state_list[-1]]
+                    # Xóa hình ảnh người chơi ở vị trí cũ
+                    new_board[curr_px][curr_py] = GOAL if new_board[curr_px][curr_py] == PLAYER_ON_GOAL else FLOOR
+                    # Đặt hình ảnh người chơi ở vị trí mới trên đường đi
+                    new_board[wx][wy] = PLAYER_ON_GOAL if new_board[wx][wy] == GOAL else PLAYER
+                    state_list.append(new_board)
+                    curr_px, curr_py = wx, wy
+                    
+            # Thêm trạng thái bản đồ sau khi đã đẩy thùng thành công
+            state_list.append(child.state)
+
         return state_list

@@ -63,6 +63,10 @@ class SokobanGame:
         if self.board[nx][ny] in [BOX, BOX_ON_GOAL]:
             nnx, nny = nx + dx, ny + dy
 
+            # Sửa lỗi: Cần kiểm tra biên cho nnx, nny trước
+            if not self.position_on_board(nnx, nny):
+                return False
+
             # 2 thùng cạnh nhau hoặc sát tường
             if self.board[nnx][nny] in [WALL, BOX, BOX_ON_GOAL]:
                 return False
