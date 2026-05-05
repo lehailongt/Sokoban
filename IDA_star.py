@@ -9,15 +9,18 @@ class IDAStarSolver:
         self.rows = len(self.board)
         self.cols = len(self.board[0]) if self.rows else 0
         # Tiền xử lý bản đồ để tìm ô chết và khoảng cách thực tế
-        self.dead_squares, self.dist_to_goal = self._precompute_map_data()
+        self.dead_squares, self.dist_to_goal = self.precompute_map_data()
         # Khởi tạo Node bắt đầu
         self.start_node = Node(self.board, 0, dead_squares=self.dead_squares, dist_to_goal=self.dist_to_goal)
         self.end_node = None
         self.time_up = 0
         self.visited = {}
 
-    def _precompute_map_data(self):
-        """Tính toán ô chết và khoảng cách thực tế (giống code mẫu)"""
+    def position_on_board(self, x, y):
+        return 0 <= x < self.rows and 0 <= y < self.cols
+
+    def precompute_map_data(self):
+        """Tính toán ô chết và khoảng cách thực tế (loang ngược từ đích)."""
         goals = []
         for r in range(self.rows):
             for c in range(self.cols):
@@ -34,10 +37,9 @@ class IDAStarSolver:
                 bx, by = queue.popleft()
                 d = dist_to_goal[g][(bx, by)]
                 for dx, dy in DIRECTIONS.values():
-                    tx, ty = bx + dx, by + dy # vị trí thùng mới nếu kéo ngược
-                    px, py = bx + 2*dx, by + 2*dy # vị trí người cần đứng để kéo ngược
-                    if 0 <= tx < self.rows and 0 <= ty < self.cols and \
-                       0 <= px < self.rows and 0 <= py < self.cols:
+                    tx, ty = bx + dx, by + dy # Vị trí thùng
+                    px, py = bx + 2*dx, by + 2*dy # Vị trí người để kéo thùng ngược lại
+                    if self.position_on_board(tx, ty) and self.position_on_board(px, py):
                         if self.board[tx][ty] != WALL and self.board[px][py] != WALL:
                             if (tx, ty) not in dist_to_goal[g]:
                                 dist_to_goal[g][(tx, ty)] = d + 1
@@ -51,7 +53,7 @@ class IDAStarSolver:
                     dead_squares.add((r, c))
         return dead_squares, dist_to_goal
 
-    def _search(self, node, threshold, pruned_values, path_keys):
+    def search(self, node, threshold, pruned_values, path_keys):
         """Hàm tìm kiếm đệ quy cho IDA*"""
         if node.f > threshold:
             pruned_values.append(node.f)
@@ -70,7 +72,7 @@ class IDAStarSolver:
             child = node.next(direction)
             if child and child.node_key not in path_keys:
                 path_keys.add(child.node_key)
-                found = self._search(child, threshold, pruned_values, path_keys)
+                found = self.search(child, threshold, pruned_values, path_keys)
                 path_keys.remove(child.node_key)
                 if found: return found
         return None
@@ -86,7 +88,7 @@ class IDAStarSolver:
             path_keys = {self.start_node.node_key}
             
             # Tìm kiếm với ngưỡng hiện tại
-            found = self._search(self.start_node, threshold, pruned_values, path_keys)
+            found = self.search(self.start_node, threshold, pruned_values, path_keys)
             
             if found:
                 self.end_node = found
@@ -103,7 +105,7 @@ class IDAStarSolver:
             print(f"Tăng ngưỡng lên: {threshold}")
             
             # Tránh lặp vô tận nếu có lỗi logic
-            if threshold > 1000: 
+            if threshold > 100: 
                 break
 
     def get_solution(self):

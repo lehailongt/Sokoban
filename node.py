@@ -16,7 +16,7 @@ class Node:
         self.h = self.heuristic()
         self.f = self.g + self.h if self.h != INF else INF
    
-    # Nếu muốn chính xác hơn (bao gồm player)
+    # Nếu muốn chính xác hơn (bao gồm player) => Có thể trùng
     def get_state_key(self):
         """Tạo key duy nhất cho trạng thái"""
         return (tuple(sorted(self.boxes)), self.player_pos)
@@ -45,28 +45,22 @@ class Node:
                     return (i, j)
         return (0, 0)
 
+    # Tối ưu phức tạp
     def heuristic(self):
-        """Heuristic nâng cao: sử dụng khoảng cách thực tế đã tính trước."""
-        if not self.boxes:
+        """Heuristic thực tế: Tổng khoảng cách ngắn nhất (né tường) từ mỗi thùng tới các đích."""
+        if not self.boxes: 
             return 0
-            
-        # Để đơn giản và nhanh, chúng ta lấy tổng khoảng cách ngắn nhất của mỗi thùng tới Đích gần nó nhất
         total = 0
-        goal_list = self.goals
-        
         for box in self.boxes:
-            if box in goal_list:
-                continue
-            # Tìm khoảng cách ngắn nhất từ thùng này tới bất kỳ đích nào
-            min_dist = INF
-            for g in goal_list:
+            min_d = INF
+            for g in self.goals:
                 d = self.dist_to_goal.get(g, {}).get(box, INF)
-                if d < min_dist:
-                    min_dist = d
+                if d < min_d: 
+                    min_d = d
             
-            if min_dist == INF:
+            if min_d == INF: 
                 return INF
-            total += min_dist
+            total += min_d
         return total
         
     def is_goal_node(self):
@@ -77,11 +71,11 @@ class Node:
                     return False
         return True
         
-    def position_on_board(self, x, y):
-        """Kiểm tra 1 tọa độ có nằm trong map trò chơi không"""
-        if x >= 0 and x < self.rows and y >= 0 and y < self.cols:
-            return True
-        return False
+    # def position_on_board(self, x, y):
+    #     """Kiểm tra 1 tọa độ có nằm trong map trò chơi không"""
+    #     if x >= 0 and x < self.rows and y >= 0 and y < self.cols:
+    #         return True
+    #     return False
     
     def is_deadlocked(self):
         """Kiểm tra ô chết (Dead squares)"""

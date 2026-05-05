@@ -46,7 +46,7 @@ def draw_map(board):
     offset_y = (HEIGHT - board_height) // 2
 
     # Xóa map cũ (FUll khối cả chiều dài witdh)
-    rect = pygame.Rect(0, offset_y, WIDTH, board_height)
+    rect = pygame.Rect(0, offset_y - CELL_SIZE, WIDTH, board_height + 2 * CELL_SIZE)
     pygame.draw.rect(screen, BLACK, rect)
     
     for i, row in enumerate(board):
@@ -144,6 +144,10 @@ def update_level_number(new_level_number):
     draw_text(f"Level {level_number + 1} / {len(LEVELS)}", HEIGHT - 120, WHITE, BLACK)
     draw_map(parse_level(level_number))
 
+def exit_game():
+    pygame.quit()
+    sys.exit()
+
 def main():
 
     global level_number, algorithm
@@ -155,7 +159,7 @@ def main():
         # Xử lý sự kiện
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                exit_game()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RIGHT:
                     if level_number < len(LEVELS) - 1:
@@ -167,7 +171,7 @@ def main():
                     level_number = 0
                     draw_init_screen()
                 elif event.key == pygame.K_q: # q
-                    running = False
+                    exit_game()
                 elif event.key == pygame.K_p: # P
                     pygame.event.clear()
 
@@ -181,8 +185,7 @@ def main():
                     while playing:
                         for event in pygame.event.get():
                             if event.type == pygame.QUIT:
-                                pygame.quit()
-                                sys.exit()
+                                exit_game()
                             elif event.type == pygame.KEYDOWN:
                                 if event.key == pygame.K_RIGHT:
                                     game.move('right')
@@ -224,8 +227,7 @@ def main():
 
         update_screen()
          
-    pygame.quit()
-    sys.exit()
+    exit_game()
 
 if __name__ == "__main__":
     main()
