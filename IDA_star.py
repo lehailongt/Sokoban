@@ -13,10 +13,10 @@ class IDAStarSolver:
         self.visited = {}
         self.end_node = None
         self.time_up = 0
-        # Tính toán trước danh sách các ô chết (deadlock) để dùng chung cho mọi Node
-        self.dead_squares = self._precompute_deadlock()
-        # Khởi tạo Node bắt đầu với danh sách ô chết
-        self.start_node = Node(self.board, 0, dead_squares=self.dead_squares)
+        # Tính toán dead_squares và khoảng cách thực tế đến từng đích
+        self.dead_squares, self.dist_to_goal = self._precompute_map_data()
+        # Khởi tạo Node bắt đầu
+        self.start_node = Node(self.board, 0, dead_squares=self.dead_squares, dist_to_goal=self.dist_to_goal)
 
     def _in_bounds(self, x, y):
         return 0 <= x < self.rows and 0 <= y < self.cols
@@ -44,12 +44,10 @@ class IDAStarSolver:
 
         return reachable
 
-    def _precompute_deadlock(self):
+    def _precompute_map_data(self):
         """
-        Tính toán các ô chết (dead squares) bằng cách kéo thùng ngược từ các ô đích.
-        Ý tưởng: Nếu một cái thùng ở vị trí A có thể được KÉO về vị trí B, 
-        thì có nghĩa là nếu thùng ở B, ta có thể ĐẨY nó về A.
-        Nếu loang từ tất cả các Đích, ô nào không thể kéo tới được thì đó là ô chết.
+        Tính toán các ô chết (dead squares) và khoảng cách thực tế đến từng đích.
+        Dùng BFS loang ngược từ các ô đích.
         """
         goals = []
         for r in range(self.rows):
@@ -57,38 +55,33 @@ class IDAStarSolver:
                 if self.board[r][c] in [GOAL, BOX_ON_GOAL, PLAYER_ON_GOAL]:
                     goals.append((r, c))
 
-        # alive_squares: Tập hợp các ô mà thùng đứng đó vẫn có cơ hội về đích
+        # dist_to_goal[goal][pos] = khoảng cách ngắn nhất để đẩy thùng từ pos đến goal
+        dist_to_goal = {g: {g: 0} for g in goals}
+        # alive_squares: Tập hợp các ô mà thùng đứng đó có thể đẩy về ĐÍCH NÀO ĐÓ
         alive_squares = set()
-        queue = deque()
-
-        # Bắt đầu loang từ các ô đích
+        
         for g in goals:
             alive_squares.add(g)
-            queue.append(g)
+            queue = deque([g])
+            
+            while queue:
+                bx, by = queue.popleft()
+                curr_dist = dist_to_goal[g][(bx, by)]
 
-        while queue:
-            bx, by = queue.popleft()
+                for dx, dy in DIRECTIONS.values():
+                    target_box_pos = (bx + dx, by + dy)
+                    player_pos = (bx + 2 * dx, by + 2 * dy)
 
-            for dx, dy in DIRECTIONS.values():
-                # Thử kéo ngược: 
-                # bx, by là vị trí hiện tại của thùng
-                # target_box_pos là vị trí thùng sẽ được kéo tới (bx + dx, by + dy)
-                # player_pos là vị trí người chơi phải đứng để kéo (bx + 2*dx, by + 2*dy)
-                
-                target_box_pos = (bx + dx, by + dy)
-                player_pos = (bx + 2 * dx, by + 2 * dy)
-
-                # Kiểm tra xem vị trí mới của thùng và vị trí đứng của người có hợp lệ không
-                if self._in_bounds(target_box_pos[0], target_box_pos[1]) and \
-                   self._in_bounds(player_pos[0], player_pos[1]):
-                    
-                    # Cả ô thùng tới và ô người đứng đều không được là tường
-                    if self.board[target_box_pos[0]][target_box_pos[1]] != WALL and \
-                       self.board[player_pos[0]][player_pos[1]] != WALL:
+                    if self._in_bounds(target_box_pos[0], target_box_pos[1]) and \
+                       self._in_bounds(player_pos[0], player_pos[1]):
                         
-                        if target_box_pos not in alive_squares:
-                            alive_squares.add(target_box_pos)
-                            queue.append(target_box_pos)
+                        if self.board[target_box_pos[0]][target_box_pos[1]] != WALL and \
+                           self.board[player_pos[0]][player_pos[1]] != WALL:
+                            
+                            if target_box_pos not in dist_to_goal[g]:
+                                dist_to_goal[g][target_box_pos] = curr_dist + 1
+                                alive_squares.add(target_box_pos)
+                                queue.append(target_box_pos)
 
         # Những ô không phải tường mà không thể kéo thùng từ đích tới được => Ô chết
         dead_squares = set()
@@ -97,7 +90,7 @@ class IDAStarSolver:
                 if self.board[r][c] != WALL and (r, c) not in alive_squares:
                     dead_squares.add((r, c))
         
-        return dead_squares
+        return dead_squares, dist_to_goal
 
     def _find_walk_path(self, board, start_pos, target_pos):
         """Sửa lỗi tốc biến: Tìm đường đi bộ (BFS) ngắn nhất từ start_pos đến target_pos mà không đẩy thùng"""
@@ -128,46 +121,55 @@ class IDAStarSolver:
         return []
 
     def _generate_children(self, node):
-        # Sinh các nút con bằng cách liệt kê các push hợp lệ.
-        # Với mỗi thùng, xét 4 hướng: nếu người chơi có thể tới ô phía sau thùng
-        # và ô đích trống thì tạo trạng thái mới sau khi đẩy thùng.
-        # Cách này đảm bảo `g` được đo theo số lần đẩy (push).
-        reachable = self._reachable_positions(node.state, node.player_pos)
+        """
+        Sinh các nút con bằng cách đi thử 4 hướng (Lên, Xuống, Trái, Phải).
+        Mỗi bước đi (kể cả đi bộ hay đẩy thùng) đều được tính là 1 đơn vị chi phí (g + 1).
+        """
         children = []
-        seen_keys = set()
         px, py = node.player_pos
 
-        for bx, by in node.boxes:
-            for dx, dy in DIRECTIONS.values():
-                player_spot = (bx - dx, by - dy)
-                target_spot = (bx + dx, by + dy)
+        for dx, dy in DIRECTIONS.values():
+            nx, ny = px + dx, py + dy
 
-                if player_spot not in reachable:
+            # Kiểm tra xem ô tiếp theo có nằm trong bản đồ không
+            if not self._in_bounds(nx, ny):
+                continue
+            
+            cell = node.state[nx][ny]
+            # Nếu gặp tường thì bỏ qua
+            if cell == WALL:
+                continue
+
+            if cell in [BOX, BOX_ON_GOAL]:
+                # TRƯỜNG HỢP GẶP THÙNG: Kiểm tra xem có đẩy được không
+                tx, ty = nx + dx, ny + dy
+                # Nếu ô phía sau thùng là tường hoặc một cái thùng khác thì không đẩy được
+                if not self._in_bounds(tx, ty) or node.state[tx][ty] in [WALL, BOX, BOX_ON_GOAL]:
                     continue
-                if not self._in_bounds(target_spot[0], target_spot[1]):
-                    continue
-
-                target_cell = node.state[target_spot[0]][target_spot[1]]
-                if target_cell in [WALL, BOX, BOX_ON_GOAL]:
-                    continue
-
-                board = [row[:] for row in node.state]
-
-                board[px][py] = GOAL if board[px][py] == PLAYER_ON_GOAL else FLOOR
-                board[bx][by] = (
-                    PLAYER_ON_GOAL if board[bx][by] == BOX_ON_GOAL else PLAYER
-                )
-                board[target_spot[0]][target_spot[1]] = (
-                    BOX_ON_GOAL if target_cell in [GOAL, PLAYER_ON_GOAL] else BOX
-                )
-
-                child = Node(board, node.g + 1, parent=node, dead_squares=self.dead_squares)
+                
+                # Tạo bản đồ mới sau khi đẩy thùng
+                new_board = [row[:] for row in node.state]
+                # Người rời vị trí cũ
+                new_board[px][py] = GOAL if new_board[px][py] == PLAYER_ON_GOAL else FLOOR
+                # Người đứng vào vị trí cũ của thùng
+                new_board[nx][ny] = PLAYER_ON_GOAL if new_board[nx][ny] == BOX_ON_GOAL else PLAYER
+                # Thùng văng sang ô mới
+                new_board[tx][ty] = BOX_ON_GOAL if new_board[tx][ty] in [GOAL, PLAYER_ON_GOAL] else BOX
+                
+                # Tạo Node con với chi phí tăng thêm 1 bước
+                child = Node(new_board, node.g + 1, parent=node, dead_squares=self.dead_squares, dist_to_goal=self.dist_to_goal)
+                # Kiểm tra xem việc đẩy này có tạo ra deadlock không
                 if child.is_deadlocked():
                     continue
-                if child.node_key in seen_keys:
-                    continue
-
-                seen_keys.add(child.node_key)
+                children.append(child)
+            else:
+                # TRƯỜNG HỢP Ô TRỐNG HOẶC ĐÍCH: Chỉ di chuyển người
+                new_board = [row[:] for row in node.state]
+                new_board[px][py] = GOAL if new_board[px][py] == PLAYER_ON_GOAL else FLOOR
+                new_board[nx][ny] = PLAYER_ON_GOAL if new_board[nx][ny] == GOAL else PLAYER
+                
+                # Tạo Node con với chi phí tăng thêm 1 bước (đi bộ)
+                child = Node(new_board, node.g + 1, parent=node, dead_squares=self.dead_squares, dist_to_goal=self.dist_to_goal)
                 children.append(child)
 
         return children
@@ -240,54 +242,19 @@ class IDAStarSolver:
             print(f"Tăng ngưỡng lên: {threshold}")
 
     def get_solution(self):
-        """Trả về list board từ start đến end, bao gồm cả các bước đi bộ."""
+        """
+        Truy vết từ Node kết quả về Node bắt đầu để lấy danh sách các trạng thái bàn cờ.
+        Vì mỗi bước đi bây giờ là 1 Node riêng biệt, ta chỉ cần thu thập state của từng Node.
+        """
         if self.end_node is None:
             return []
 
-        node_list = []
+        state_list = []
         node = self.end_node
-
         while node is not None:
-            node_list.append(node)
+            state_list.append(node.state)
             node = node.parent
-
-        node_list.reverse()
-
-        state_list = [node_list[0].state]
-
-        for i in range(len(node_list) - 1):
-            parent = node_list[i]
-            child = node_list[i + 1]
-
-            # Sửa lỗi tốc biến: Tìm xem cái thùng nào vừa bị đẩy từ parent sang child
-            old_boxes = set(parent.boxes)
-            new_boxes = set(child.boxes)
-            
-            diff_old = old_boxes - new_boxes
-            diff_new = new_boxes - old_boxes
-            if diff_old and diff_new:
-                moved_box_old = list(diff_old)[0]
-                moved_box_new = list(diff_new)[0]
-                
-                # Tính toán hướng đẩy (dx, dy) và vị trí người chơi CẦN ĐỨNG để đẩy cái thùng đó
-                dx = moved_box_new[0] - moved_box_old[0]
-                dy = moved_box_new[1] - moved_box_old[1]
-                player_spot = (moved_box_old[0] - dx, moved_box_old[1] - dy)
-
-                # Sinh ra các trạng thái (frame) diễn tả cảnh người chơi đi bộ tới player_spot
-                walk_path = self._find_walk_path(parent.state, parent.player_pos, player_spot)
-                
-                curr_px, curr_py = parent.player_pos
-                for wx, wy in walk_path:
-                    new_board = [row[:] for row in state_list[-1]]
-                    # Xóa hình ảnh người chơi ở vị trí cũ
-                    new_board[curr_px][curr_py] = GOAL if new_board[curr_px][curr_py] == PLAYER_ON_GOAL else FLOOR
-                    # Đặt hình ảnh người chơi ở vị trí mới trên đường đi
-                    new_board[wx][wy] = PLAYER_ON_GOAL if new_board[wx][wy] == GOAL else PLAYER
-                    state_list.append(new_board)
-                    curr_px, curr_py = wx, wy
-                    
-            # Thêm trạng thái bản đồ sau khi đã đẩy thùng thành công
-            state_list.append(child.state)
-
+        
+        # Đảo ngược danh sách để có thứ tự từ đầu đến cuối
+        state_list.reverse()
         return state_list

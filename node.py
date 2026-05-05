@@ -4,7 +4,7 @@ from constants import *
 
 
 class Node:
-    def __init__(self, state, g, parent=None, dead_squares=None):
+    def __init__(self, state, g, parent=None, dead_squares=None, dist_to_goal=None):
         self.state = state
         self.rows = len(self.state)
         self.cols = len(self.state[0]) if self.rows else 0
@@ -12,6 +12,7 @@ class Node:
         self.goals = self.find_goals()
         # Danh sách các ô bế tắc đã được tính toán từ trước (deadlock precomputation)
         self.dead_squares = dead_squares if dead_squares is not None else set()
+        self.dist_to_goal = dist_to_goal if dist_to_goal is not None else {}
         self.player_pos = self.find_player()
         self.node_key = self.get_state_key()
         self.parent = parent
@@ -20,23 +21,12 @@ class Node:
         self.f = self.g + self.h if self.h != INF else INF
 
     def get_state_key(self):
-        """Tạo key duy nhất cho trạng thái. Tối ưu: Lấy điểm trên cùng bên trái của vùng di chuyển được làm đại diện."""
-        from collections import deque
-        reachable = set()
-        queue = deque([self.player_pos])
-        reachable.add(self.player_pos)
-        
-        while queue:
-            x, y = queue.popleft()
-            for dx, dy in DIRECTIONS.values():
-                nx, ny = x + dx, y + dy
-                if 0 <= nx < self.rows and 0 <= ny < self.cols:
-                    if (nx, ny) not in reachable and self.state[nx][ny] not in [WALL, BOX, BOX_ON_GOAL]:
-                        reachable.add((nx, ny))
-                        queue.append((nx, ny))
-                        
-        normalized_player_pos = min(reachable)
-        return (tuple(sorted(self.boxes)), normalized_player_pos)
+        """
+        Tạo key duy nhất cho trạng thái bao gồm vị trí thùng và vị trí người chơi.
+        Vì chúng ta tối ưu theo từng bước đi (Step-by-step), nên mỗi vị trí đứng 
+        khác nhau của người chơi sẽ được coi là một trạng thái khác nhau.
+        """
+        return (tuple(sorted(self.boxes)), self.player_pos)
 
     def find_boxes(self):
         boxes = []
@@ -92,7 +82,12 @@ class Node:
                 if tail == INF:
                     continue
 
-                cost = abs(bx - gx) + abs(by - gy) + tail
+                # Lấy khoảng cách thực tế đã tính trước. Nếu không tới được thì coi như vô cùng.
+                dist = self.dist_to_goal.get(goals[goal_index], {}).get((bx, by), INF)
+                if dist == INF:
+                    continue
+                
+                cost = dist + tail
                 if cost < best:
                     best = cost
 
