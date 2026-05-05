@@ -4,12 +4,14 @@ from constants import *
 
 
 class Node:
-    def __init__(self, state, g, parent=None):
+    def __init__(self, state, g, parent=None, dead_squares=None):
         self.state = state
         self.rows = len(self.state)
         self.cols = len(self.state[0]) if self.rows else 0
         self.boxes = self.find_boxes()
         self.goals = self.find_goals()
+        # Danh sách các ô bế tắc đã được tính toán từ trước (deadlock precomputation)
+        self.dead_squares = dead_squares if dead_squares is not None else set()
         self.player_pos = self.find_player()
         self.node_key = self.get_state_key()
         self.parent = parent
@@ -107,25 +109,14 @@ class Node:
         return True
 
     def is_deadlocked(self):
-        """Deadlock cơ bản: box không nằm trên goal và bị kẹt ở góc tường."""
+        """Kiểm tra deadlock bằng danh sách dead_squares (ô chết) đã được tính toán trước."""
         goal_set = set(self.goals)
 
-        for x, y in self.boxes:
-            if (x, y) in goal_set:
-                continue
-
-            up_wall = self.state[x - 1][y] == WALL
-            down_wall = self.state[x + 1][y] == WALL
-            left_wall = self.state[x][y - 1] == WALL
-            right_wall = self.state[x][y + 1] == WALL
-
-            if (
-                (up_wall and left_wall)
-                or (up_wall and right_wall)
-                or (down_wall and left_wall)
-                or (down_wall and right_wall)
-            ):
-                return True
-
+        for bx, by in self.boxes:
+            # Nếu thùng không nằm trên ô đích và vị trí hiện tại nằm trong dead_squares
+            # thì có nghĩa là thùng này không bao giờ có thể được đẩy về đích nữa.
+            if (bx, by) not in goal_set:
+                if (bx, by) in self.dead_squares:
+                    return True
         return False
         # Di chuyển thùng

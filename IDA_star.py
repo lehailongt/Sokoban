@@ -10,10 +10,13 @@ class IDAStarSolver:
         self.board = [row[:] for row in board]
         self.rows = len(self.board)
         self.cols = len(self.board[0]) if self.rows else 0
-        self.start_node = Node(self.board, 0)
+        self.visited = {}
         self.end_node = None
         self.time_up = 0
-        self.visited = {}
+        # Tính toán trước danh sách các ô chết (deadlock) để dùng chung cho mọi Node
+        self.dead_squares = self._precompute_deadlock()
+        # Khởi tạo Node bắt đầu với danh sách ô chết
+        self.start_node = Node(self.board, 0, dead_squares=self.dead_squares)
 
     def _in_bounds(self, x, y):
         return 0 <= x < self.rows and 0 <= y < self.cols
@@ -40,6 +43,61 @@ class IDAStarSolver:
                 queue.append((nx, ny))
 
         return reachable
+
+    def _precompute_deadlock(self):
+        """
+        Tính toán các ô chết (dead squares) bằng cách kéo thùng ngược từ các ô đích.
+        Ý tưởng: Nếu một cái thùng ở vị trí A có thể được KÉO về vị trí B, 
+        thì có nghĩa là nếu thùng ở B, ta có thể ĐẨY nó về A.
+        Nếu loang từ tất cả các Đích, ô nào không thể kéo tới được thì đó là ô chết.
+        """
+        goals = []
+        for r in range(self.rows):
+            for c in range(self.cols):
+                if self.board[r][c] in [GOAL, BOX_ON_GOAL, PLAYER_ON_GOAL]:
+                    goals.append((r, c))
+
+        # alive_squares: Tập hợp các ô mà thùng đứng đó vẫn có cơ hội về đích
+        alive_squares = set()
+        queue = deque()
+
+        # Bắt đầu loang từ các ô đích
+        for g in goals:
+            alive_squares.add(g)
+            queue.append(g)
+
+        while queue:
+            bx, by = queue.popleft()
+
+            for dx, dy in DIRECTIONS.values():
+                # Thử kéo ngược: 
+                # bx, by là vị trí hiện tại của thùng
+                # target_box_pos là vị trí thùng sẽ được kéo tới (bx + dx, by + dy)
+                # player_pos là vị trí người chơi phải đứng để kéo (bx + 2*dx, by + 2*dy)
+                
+                target_box_pos = (bx + dx, by + dy)
+                player_pos = (bx + 2 * dx, by + 2 * dy)
+
+                # Kiểm tra xem vị trí mới của thùng và vị trí đứng của người có hợp lệ không
+                if self._in_bounds(target_box_pos[0], target_box_pos[1]) and \
+                   self._in_bounds(player_pos[0], player_pos[1]):
+                    
+                    # Cả ô thùng tới và ô người đứng đều không được là tường
+                    if self.board[target_box_pos[0]][target_box_pos[1]] != WALL and \
+                       self.board[player_pos[0]][player_pos[1]] != WALL:
+                        
+                        if target_box_pos not in alive_squares:
+                            alive_squares.add(target_box_pos)
+                            queue.append(target_box_pos)
+
+        # Những ô không phải tường mà không thể kéo thùng từ đích tới được => Ô chết
+        dead_squares = set()
+        for r in range(self.rows):
+            for c in range(self.cols):
+                if self.board[r][c] != WALL and (r, c) not in alive_squares:
+                    dead_squares.add((r, c))
+        
+        return dead_squares
 
     def _find_walk_path(self, board, start_pos, target_pos):
         """Sửa lỗi tốc biến: Tìm đường đi bộ (BFS) ngắn nhất từ start_pos đến target_pos mà không đẩy thùng"""
@@ -103,7 +161,7 @@ class IDAStarSolver:
                     BOX_ON_GOAL if target_cell in [GOAL, PLAYER_ON_GOAL] else BOX
                 )
 
-                child = Node(board, node.g + 1, parent=node)
+                child = Node(board, node.g + 1, parent=node, dead_squares=self.dead_squares)
                 if child.is_deadlocked():
                     continue
                 if child.node_key in seen_keys:
