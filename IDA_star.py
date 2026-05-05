@@ -1,142 +1,188 @@
+from collections import deque
 from constants import *
 from node import Node
 import time
 
 class IDAStarSolver:
     def __init__(self, board):
-        self.board = board
+        self.board = [row[:] for row in board]
         self.rows = len(self.board)
-        self.cols = len(self.board[0])
-        self.goals = self.find_goals()
-        self.player_pos = self.find_player()
-
-        self.start_node = Node(board, 0)
+        self.cols = len(self.board[0]) if self.rows else 0
+        # Tiền xử lý bản đồ để tìm ô chết và bảng khoảng cách thực tế
+        self.dead_squares, self.dist_to_goal = self._precompute_map_data()
+        self.start_node = Node(self.board, 0, dead_squares=self.dead_squares, dist_to_goal=self.dist_to_goal)
         self.end_node = None
         self.time_up = 0
         self.visited = {}
-    
-    def find_player(self):
-        for i in range(self.rows):
-            for j in range(self.cols):
-                if self.board[i][j] in [PLAYER, PLAYER_ON_GOAL]:
-                    return (i, j)
-        return (0, 0)
-    
-    def find_boxes(self):
-        boxes = []
-        for i in range(self.rows):
-            for j in range(self.cols):
-                if self.board[i][j] in [BOX, BOX_ON_GOAL]:
-                    boxes.append((i, j))
-        return boxes
-    
-    def find_goals(self):
+
+    def _in_bounds(self, x, y):
+        return 0 <= x < self.rows and 0 <= y < self.cols
+
+    def _precompute_map_data(self):
+        """Tính toán ô chết và khoảng cách thực tế (loang ngược từ đích)."""
         goals = []
-        for i in range(self.rows):
-            for j in range(self.cols):
-                if self.board[i][j] in [GOAL, BOX_ON_GOAL, PLAYER_ON_GOAL]:
-                    goals.append((i, j))
-        return goals
+        for r in range(self.rows):
+            for c in range(self.cols):
+                if self.board[r][c] in [GOAL, BOX_ON_GOAL, PLAYER_ON_GOAL]:
+                    goals.append((r, c))
 
-    # def is_deadlock(self, box_pos):
-    #     """Kiểm tra deadlock cho một thùng"""
-    #     state = self.board
-    #     x, y = box_pos
+        dist_to_goal = {g: {g: 0} for g in goals}
+        alive_squares = set()
         
-    #     # Deadlock ở góc
-    #     if state[x][y] != BOX:
-    #         return False
-            
-    #     # Kiểm tra góc tường
-    #     up_wall = x == 0 or state[x-1][y] == WALL
-    #     down_wall = x == self.rows-1 or state[x+1][y] == WALL
-    #     left_wall = y == 0 or state[x][y-1] == WALL
-    #     right_wall = y == self.cols-1 or state[x][y+1] == WALL
+        for g in goals:
+            alive_squares.add(g)
+            queue = deque([g])
+            while queue:
+                bx, by = queue.popleft()
+                d = dist_to_goal[g][(bx, by)]
+                for dx, dy in DIRECTIONS.values():
+                    tx, ty = bx + dx, by + dy # Vị trí thùng
+                    px, py = bx + 2*dx, by + 2*dy # Vị trí người để kéo thùng ngược lại
+                    if self._in_bounds(tx, ty) and self._in_bounds(px, py):
+                        if self.board[tx][ty] != WALL and self.board[px][py] != WALL:
+                            if (tx, ty) not in dist_to_goal[g]:
+                                dist_to_goal[g][(tx, ty)] = d + 1
+                                alive_squares.add((tx, ty))
+                                queue.append((tx, ty))
+
+        dead_squares = set()
+        for r in range(self.rows):
+            for c in range(self.cols):
+                if self.board[r][c] != WALL and (r, c) not in alive_squares:
+                    dead_squares.add((r, c))
+        return dead_squares, dist_to_goal
+
+    def _reachable_positions(self, board, start_pos):
+        """Flood-fill tìm tất cả các ô người chơi có thể đi bộ tới."""
+        queue = deque([start_pos])
+        reachable = {start_pos}
+        while queue:
+            x, y = queue.popleft()
+            for dx, dy in DIRECTIONS.values():
+                nx, ny = x + dx, y + dy
+                if self._in_bounds(nx, ny) and (nx, ny) not in reachable and board[nx][ny] not in [WALL, BOX, BOX_ON_GOAL]:
+                    reachable.add((nx, ny))
+                    queue.append((nx, ny))
+        return reachable
+
+    def _find_walk_path(self, board, start_pos, target_pos):
+        """BFS tìm đường đi bộ giữa 2 vị trí."""
+        if start_pos == target_pos: return []
+        queue = deque([(start_pos, [])])
+        visited = {start_pos}
+        while queue:
+            (x, y), path = queue.popleft()
+            for dx, dy in DIRECTIONS.values():
+                nx, ny = x + dx, y + dy
+                if self._in_bounds(nx, ny) and (nx, ny) not in visited and board[nx][ny] not in [WALL, BOX, BOX_ON_GOAL]:
+                    new_path = path + [(nx, ny)]
+                    if (nx, ny) == target_pos: return new_path
+                    visited.add((nx, ny))
+                    queue.append(((nx, ny), new_path))
+        return []
+
+    def _generate_children(self, node):
+        """Sinh con theo kiểu Macro-step: Mỗi con là một lần đẩy thùng thành công."""
+        reachable = self._reachable_positions(node.state, node.player_pos)
+        children = []
+        px, py = node.player_pos
+
+        for bx, by in node.boxes:
+            for dx, dy in DIRECTIONS.values():
+                player_spot = (bx - dx, by - dy)
+                target_spot = (bx + dx, by + dy)
+
+                if player_spot in reachable and self._in_bounds(target_spot[0], target_spot[1]) and \
+                   node.state[target_spot[0]][target_spot[1]] not in [WALL, BOX, BOX_ON_GOAL]:
+                    
+                    new_board = [row[:] for row in node.state]
+                    new_board[px][py] = GOAL if new_board[px][py] == PLAYER_ON_GOAL else FLOOR
+                    new_board[bx][by] = PLAYER_ON_GOAL if new_board[bx][by] == BOX_ON_GOAL else PLAYER
+                    new_board[target_spot[0]][target_spot[1]] = BOX_ON_GOAL if node.state[target_spot[0]][target_spot[1]] == GOAL else BOX
+                    
+                    # Chi phí g + 1 (tối ưu số lần đẩy)
+                    child = Node(new_board, node.g + 1, parent=node, dead_squares=self.dead_squares, dist_to_goal=self.dist_to_goal)
+                    if not child.is_deadlocked():
+                        children.append(child)
+        return children
+
+    def _search(self, node, threshold, pruned_values, path_keys):
+        if node.f > threshold:
+            pruned_values.append(node.f)
+            return None
         
-    #     # Góc trên trái
-    #     if (up_wall or left_wall) and (up_wall and left_wall):
-    #         if (x, y) not in self.goals:
-    #             return True
-    #     # Góc trên phải
-    #     if (up_wall or right_wall) and (up_wall and right_wall):
-    #         if (x, y) not in self.goals:
-    #             return True
-    #     # Góc dưới trái
-    #     if (down_wall or left_wall) and (down_wall and left_wall):
-    #         if (x, y) not in self.goals:
-    #             return True
-    #     # Góc dưới phải
-    #     if (down_wall or right_wall) and (down_wall and right_wall):
-    #         if (x, y) not in self.goals:
-    #             return True
-                
-    #     return False
-    
-    # def check_deadlocks(self, state):
-    #     """Kiểm tra tất cả các deadlock"""
-    #     boxes = self.find_boxes()
-    #     for box in boxes:
-    #         if self.is_deadlock(box):
-    #             return True
-    #     return False
-    
+        if node.is_goal_node():
+            return node
+
+        best_g = self.visited.get(node.node_key, INF)
+        if best_g <= node.g: return None
+        self.visited[node.node_key] = node.g
+
+        for child in self._generate_children(node):
+            if child.node_key not in path_keys:
+                path_keys.add(child.node_key)
+                found = self._search(child, threshold, pruned_values, path_keys)
+                path_keys.remove(child.node_key)
+                if found: return found
+        return None
+
     def solve(self):
-        """Giải bài toán bằng IDA*"""
-
-        # BẮT ĐẦU ĐO THỜI GIAN
+        """Giải bài toán bằng IDA* tối ưu số lần đẩy."""
         start_time = time.time()
-
         threshold = self.start_node.h
+        self.visited = {} # Khởi tạo bộ nhớ 1 lần duy nhất
         
         while True:
-            visited = {}
-            visited[self.start_node.node_key] = self.start_node
-            node_list = [self.start_node]
-
-            while len(node_list) > 0:
-                
-                current_node = node_list.pop()
-                visited[current_node.node_key] = current_node
-
-                if current_node.is_goal_node():
-                    end_time = time.time()
-                    self.time_up = end_time - start_time
-                    print(f"Thời gian chạy thuật toán IDA*: {self.time_up}")
-                    print(f"Số trạng thái đã duyệt {len(visited)}")
-                    self.end_node = current_node
-                    self.visited = visited
-                    return
-                
-                for direction in DIRECTIONS:
-                    next_node = current_node.next(direction)
-
-                    if next_node == None or next_node.node_key in visited or next_node.f > threshold:
-                        continue
-                    
-                    node_list.append(next_node)
-                    
-            print(f"Tăng ngưỡng lên: {threshold}")
-            threshold += STEP_BETA
-            # Điều kiện khi biết sẽ không có lời giải
-            if threshold > 100:
+            pruned_values = []
+            path_keys = {self.start_node.node_key}
+            
+            found = self._search(self.start_node, threshold, pruned_values, path_keys)
+            
+            if found:
+                self.end_node = found
+                self.time_up = time.time() - start_time
+                print(f"Thời gian chạy (Push-optimal): {self.time_up}")
+                print(f"Số trạng thái: {len(self.visited)}")
                 return
+            
+            if not pruned_values: break
+            threshold = min(pruned_values)
+            print(f"Tăng ngưỡng lên: {threshold}")
 
     def get_solution(self):
-        # Trẻ về đường dẫn tới chiến thắng: list board
-        node_key = self.end_node.node_key
-        state_list = [self.end_node.state]
+        """Trả về danh sách board bao gồm cả các bước đi bộ bù vào giữa các lần đẩy."""
+        if not self.end_node: return []
+        
+        nodes = []
+        curr = self.end_node
+        while curr:
+            nodes.append(curr)
+            curr = curr.parent
+        nodes.reverse()
 
-        start_key = self.start_node.node_key
+        state_list = [nodes[0].state]
 
-        while node_key != start_key:
-            current_node = self.visited[node_key]
-            node_key = current_node.pre_node_key
-            if node_key is not None:
-                state_list.append(self.visited[node_key].state)
+        for i in range(len(nodes) - 1):
+            p, c = nodes[i], nodes[i+1]
+            
+            # Tìm thùng bị đẩy
+            p_boxes = set(p.find_boxes()); c_boxes = set(c.find_boxes())
+            box_from = list(p_boxes - c_boxes)[0]
+            box_to = list(c_boxes - p_boxes)[0]
+            dx, dy = box_to[0] - box_from[0], box_to[1] - box_from[1]
+            player_goal_spot = (box_from[0] - dx, box_from[1] - dy)
 
-        state_list.reverse()
+            # Sinh các bước đi bộ
+            walk_path = self._find_walk_path(p.state, p.player_pos, player_goal_spot)
+            curr_px, curr_py = p.player_pos
+            for wx, wy in walk_path:
+                new_board = [row[:] for row in state_list[-1]]
+                new_board[curr_px][curr_py] = GOAL if new_board[curr_px][curr_py] == PLAYER_ON_GOAL else FLOOR
+                new_board[wx][wy] = PLAYER_ON_GOAL if new_board[wx][wy] == GOAL else PLAYER
+                state_list.append(new_board)
+                curr_px, curr_py = wx, wy
+            
+            # Thêm state đẩy thùng
+            state_list.append(c.state)
+
         return state_list
-
-
-
-

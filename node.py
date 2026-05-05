@@ -1,24 +1,39 @@
 from constants import *
 
 class Node:
-    def __init__(self, state, g):
+    def __init__(self, state, g, parent=None, dead_squares=None, dist_to_goal=None):
         self.state = state
         self.rows = len(self.state)
         self.cols = len(self.state[0])
         self.boxes = self.find_boxes()
         self.goals = self.find_goals()
         self.player_pos = self.find_player()
+        self.parent = parent
+        self.dead_squares = dead_squares if dead_squares is not None else set()
+        self.dist_to_goal = dist_to_goal if dist_to_goal is not None else {}
         self.node_key = self.get_state_key()
-        self.pre_node_key = None
         self.g = g
         self.h = self.heuristic()
-        self.f = self.g + self.h
+        self.f = self.g + self.h if self.h != INF else INF
    
-    # Nếu muốn chính xác hơn (bao gồm player)
     def get_state_key(self):
-        """Tạo key duy nhất cho trạng thái"""
-        return (tuple(sorted(self.boxes)), self.player_pos)
-        # [(x1,y1), (x2,y2), ..., (playerx, playery)] -> ((x1,y1), (x2,y2), ..., (playerx, playery))
+        """Tạo key duy nhất cho trạng thái. Dùng vị trí người chơi chuẩn hóa."""
+        from collections import deque
+        reachable = set()
+        queue = deque([self.player_pos])
+        reachable.add(self.player_pos)
+        
+        while queue:
+            x, y = queue.popleft()
+            for dx, dy in DIRECTIONS.values():
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < self.rows and 0 <= ny < self.cols:
+                    if (nx, ny) not in reachable and self.state[nx][ny] not in [WALL, BOX, BOX_ON_GOAL]:
+                        reachable.add((nx, ny))
+                        queue.append((nx, ny))
+                        
+        normalized_player_pos = min(reachable)
+        return (tuple(sorted(self.boxes)), normalized_player_pos)
    
     def find_boxes(self):
         boxes = []
@@ -44,17 +59,18 @@ class Node:
         return (0, 0)
 
     def heuristic(self):
-        """Hàm heuristic: tổng khoảng cách Manhattan từ mỗi thùng đến đích"""
-        boxes = self.boxes[:]
-        goals = self.goals[:]
-        boxes.sort()
-        goals.sort()
-
-        total_distance = 0
-        for i in range(len(boxes)):
-            total_distance += abs(boxes[i][0] - goals[i][0]) + abs(boxes[i][1] - goals[i][1])
-                
-        return total_distance
+        """Heuristic thực tế: Tổng khoảng cách ngắn nhất (né tường) từ mỗi thùng tới các đích."""
+        if not self.boxes: return 0
+        total = 0
+        for box in self.boxes:
+            min_d = INF
+            for g in self.goals:
+                d = self.dist_to_goal.get(g, {}).get(box, INF)
+                if d < min_d: min_d = d
+            
+            if min_d == INF: return INF
+            total += min_d
+        return total
         
     def is_goal_node(self):
         """Kiểm tra xem đã thắng chưa"""
@@ -63,73 +79,11 @@ class Node:
                 if self.state[i][j] == BOX:
                     return False
         return True
-        
-    def position_on_board(self, x, y):
-        """Kiểm tra 1 tọa độ có nằm trong map trò chơi không"""
-        if x > 1 and x < self.rows and y > 1 or y < self.cols:
-            return True
-        return False
     
-    def next(self, direction):
-        """Tìm trạng thái tiếp theo với hướng di chuyển"""
-        px, py = self.find_player()
-        dx, dy = DIRECTIONS[direction]
-        nx, ny = px + dx, py + dy
-        
-        # Kiểm tra biên
-        if not self.position_on_board(nx, ny):
-            return None
-        
-        board = [row[:] for row in self.state]
-
-        # Kiểm tra tường
-        if board[nx][ny] == WALL:
-            return None
-        
-        # Di chuyển đẩy thùng
-        if board[nx][ny] in [BOX, BOX_ON_GOAL]:
-            nnx, nny = nx + dx, ny + dy
-           
-            # Thùng sát biên
-            if not self.position_on_board(nnx, nny):
-                return None
-           
-            # 2 thùng cạnh nhau
-            if board[nnx][nny] in [WALL, BOX, BOX_ON_GOAL]:
-                return None
-            
-            # Đẩy thùng
-            # Xóa vị trí cũ của người
-            if board[px][py] == PLAYER_ON_GOAL:
-                board[px][py] = GOAL
-            else:
-                board[px][py] = FLOOR
-            
-            # Di chuyển thùng
-            if board[nnx][nny] == GOAL:
-                board[nnx][nny] = BOX_ON_GOAL
-            else:
-                board[nnx][nny] = BOX
-            
-            # Di chuyển người
-            if board[nx][ny] == BOX_ON_GOAL:
-                board[nx][ny] = PLAYER_ON_GOAL
-            else:
-                board[nx][ny] = PLAYER
-
-        # Di chuyển bình thường
-        else:
-            if board[px][py] == PLAYER_ON_GOAL:
-                board[px][py] = GOAL
-            else:
-                board[px][py] = FLOOR
-            
-            if board[nx][ny] == GOAL:
-                board[nx][ny] = PLAYER_ON_GOAL
-            else:
-                board[nx][ny] = PLAYER
-            
-        node = Node(board, self.g + 1)
-        node.pre_node_key = self.node_key
-        return node
-        
+    def is_deadlocked(self):
+        """Kiểm tra ô chết (Dead squares)"""
+        goal_set = set(self.goals)
+        for box in self.boxes:
+            if box not in goal_set and box in self.dead_squares:
+                return True
+        return False
