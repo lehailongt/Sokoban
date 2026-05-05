@@ -208,6 +208,11 @@ def main():
                     solver.solve()
                     if solver.end_node == None:
                         print("No Solution")
+                        # Hiển thị thông báo lỗi lên màn hình game
+                        draw_text("NO SOLUTION FOUND!", HEIGHT // 2 + 80, (255, 0, 0), BLACK)
+                        update_screen()
+                        time.sleep(2) # Giữ thông báo trong 2 giây
+                        draw_init_screen()
                         continue
                     
                     solution = solver.get_solution()
