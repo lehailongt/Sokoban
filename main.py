@@ -144,6 +144,10 @@ def update_level_number(new_level_number):
     draw_text(f"Level {level_number + 1} / {len(LEVELS)}", HEIGHT - 120, WHITE, BLACK)
     draw_map(parse_level(level_number))
 
+def exit_game():
+    pygame.quit()
+    sys.exit()
+
 def main():
 
     global level_number, algorithm
@@ -155,7 +159,7 @@ def main():
         # Xử lý sự kiện
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                exit_game()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RIGHT:
                     if level_number < len(LEVELS) - 1:
@@ -167,7 +171,7 @@ def main():
                     level_number = 0
                     draw_init_screen()
                 elif event.key == pygame.K_q: # q
-                    running = False
+                    exit_game()
                 elif event.key == pygame.K_p: # P
                     pygame.event.clear()
 
@@ -181,8 +185,7 @@ def main():
                     while playing:
                         for event in pygame.event.get():
                             if event.type == pygame.QUIT:
-                                pygame.quit()
-                                sys.exit()
+                                exit_game()
                             elif event.type == pygame.KEYDOWN:
                                 if event.key == pygame.K_RIGHT:
                                     game.move('right')
@@ -208,6 +211,11 @@ def main():
                     solver.solve()
                     if solver.end_node == None:
                         print("No Solution")
+                        # Hiển thị thông báo lỗi lên màn hình game
+                        draw_text("NO SOLUTION FOUND!", HEIGHT // 2 + 80, (255, 0, 0), BLACK)
+                        update_screen()
+                        time.sleep(2) # Giữ thông báo trong 2 giây
+                        draw_init_screen()
                         continue
                     
                     solution = solver.get_solution()
@@ -219,8 +227,7 @@ def main():
 
         update_screen()
          
-    pygame.quit()
-    sys.exit()
+    exit_game()
 
 if __name__ == "__main__":
     main()

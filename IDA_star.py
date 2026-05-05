@@ -9,16 +9,16 @@ class IDAStarSolver:
         self.rows = len(self.board)
         self.cols = len(self.board[0]) if self.rows else 0
         # Tiền xử lý bản đồ để tìm ô chết và bảng khoảng cách thực tế
-        self.dead_squares, self.dist_to_goal = self._precompute_map_data()
+        self.dead_squares, self.dist_to_goal = self.precompute_map_data()
         self.start_node = Node(self.board, 0, dead_squares=self.dead_squares, dist_to_goal=self.dist_to_goal)
         self.end_node = None
         self.time_up = 0
         self.visited = {}
 
-    def _in_bounds(self, x, y):
+    def position_on_board(self, x, y):
         return 0 <= x < self.rows and 0 <= y < self.cols
 
-    def _precompute_map_data(self):
+    def precompute_map_data(self):
         """Tính toán ô chết và khoảng cách thực tế (loang ngược từ đích)."""
         goals = []
         for r in range(self.rows):
@@ -38,7 +38,7 @@ class IDAStarSolver:
                 for dx, dy in DIRECTIONS.values():
                     tx, ty = bx + dx, by + dy # Vị trí thùng
                     px, py = bx + 2*dx, by + 2*dy # Vị trí người để kéo thùng ngược lại
-                    if self._in_bounds(tx, ty) and self._in_bounds(px, py):
+                    if self.position_on_board(tx, ty) and self.position_on_board(px, py):
                         if self.board[tx][ty] != WALL and self.board[px][py] != WALL:
                             if (tx, ty) not in dist_to_goal[g]:
                                 dist_to_goal[g][(tx, ty)] = d + 1
@@ -52,7 +52,7 @@ class IDAStarSolver:
                     dead_squares.add((r, c))
         return dead_squares, dist_to_goal
 
-    def _reachable_positions(self, board, start_pos):
+    def reachable_positions(self, board, start_pos):
         """Flood-fill tìm tất cả các ô người chơi có thể đi bộ tới."""
         queue = deque([start_pos])
         reachable = {start_pos}
@@ -60,12 +60,12 @@ class IDAStarSolver:
             x, y = queue.popleft()
             for dx, dy in DIRECTIONS.values():
                 nx, ny = x + dx, y + dy
-                if self._in_bounds(nx, ny) and (nx, ny) not in reachable and board[nx][ny] not in [WALL, BOX, BOX_ON_GOAL]:
+                if self.position_on_board(nx, ny) and (nx, ny) not in reachable and board[nx][ny] not in [WALL, BOX, BOX_ON_GOAL]:
                     reachable.add((nx, ny))
                     queue.append((nx, ny))
         return reachable
 
-    def _find_walk_path(self, board, start_pos, target_pos):
+    def find_walk_path(self, board, start_pos, target_pos):
         """BFS tìm đường đi bộ giữa 2 vị trí."""
         if start_pos == target_pos: return []
         queue = deque([(start_pos, [])])
@@ -74,16 +74,16 @@ class IDAStarSolver:
             (x, y), path = queue.popleft()
             for dx, dy in DIRECTIONS.values():
                 nx, ny = x + dx, y + dy
-                if self._in_bounds(nx, ny) and (nx, ny) not in visited and board[nx][ny] not in [WALL, BOX, BOX_ON_GOAL]:
+                if self.position_on_board(nx, ny) and (nx, ny) not in visited and board[nx][ny] not in [WALL, BOX, BOX_ON_GOAL]:
                     new_path = path + [(nx, ny)]
                     if (nx, ny) == target_pos: return new_path
                     visited.add((nx, ny))
                     queue.append(((nx, ny), new_path))
         return []
 
-    def _generate_children(self, node):
+    def generate_children(self, node):
         """Sinh con theo kiểu Macro-step: Mỗi con là một lần đẩy thùng thành công."""
-        reachable = self._reachable_positions(node.state, node.player_pos)
+        reachable = self.reachable_positions(node.state, node.player_pos)
         children = []
         px, py = node.player_pos
 
@@ -92,7 +92,7 @@ class IDAStarSolver:
                 player_spot = (bx - dx, by - dy)
                 target_spot = (bx + dx, by + dy)
 
-                if player_spot in reachable and self._in_bounds(target_spot[0], target_spot[1]) and \
+                if player_spot in reachable and self.position_on_board(target_spot[0], target_spot[1]) and \
                    node.state[target_spot[0]][target_spot[1]] not in [WALL, BOX, BOX_ON_GOAL]:
                     
                     new_board = [row[:] for row in node.state]
@@ -106,7 +106,7 @@ class IDAStarSolver:
                         children.append(child)
         return children
 
-    def _search(self, node, threshold, pruned_values, path_keys):
+    def search(self, node, threshold, pruned_values, path_keys):
         if node.f > threshold:
             pruned_values.append(node.f)
             return None
@@ -118,10 +118,10 @@ class IDAStarSolver:
         if best_g <= node.g: return None
         self.visited[node.node_key] = node.g
 
-        for child in self._generate_children(node):
+        for child in self.generate_children(node):
             if child.node_key not in path_keys:
                 path_keys.add(child.node_key)
-                found = self._search(child, threshold, pruned_values, path_keys)
+                found = self.search(child, threshold, pruned_values, path_keys)
                 path_keys.remove(child.node_key)
                 if found: return found
         return None
@@ -136,7 +136,7 @@ class IDAStarSolver:
             pruned_values = []
             path_keys = {self.start_node.node_key}
             
-            found = self._search(self.start_node, threshold, pruned_values, path_keys)
+            found = self.search(self.start_node, threshold, pruned_values, path_keys)
             
             if found:
                 self.end_node = found
@@ -173,7 +173,7 @@ class IDAStarSolver:
             player_goal_spot = (box_from[0] - dx, box_from[1] - dy)
 
             # Sinh các bước đi bộ
-            walk_path = self._find_walk_path(p.state, p.player_pos, player_goal_spot)
+            walk_path = self.find_walk_path(p.state, p.player_pos, player_goal_spot)
             curr_px, curr_py = p.player_pos
             for wx, wy in walk_path:
                 new_board = [row[:] for row in state_list[-1]]
