@@ -44,15 +44,14 @@ class Node:
         return (0, 0)
 
     def heuristic(self):
-        """Hàm heuristic: tổng khoảng cách Manhattan từ mỗi thùng đến đích"""
-        boxes = self.boxes[:]
-        goals = self.goals[:]
-        boxes.sort()
-        goals.sort()
+        """Hàm heuristic: tổng khoảng cách Manhattan từ mỗi thùng đến đích gần nhất"""
 
         total_distance = 0
-        for i in range(len(boxes)):
-            total_distance += abs(boxes[i][0] - goals[i][0]) + abs(boxes[i][1] - goals[i][1])
+        for bx, by in self.boxes:
+            min_dis = INF
+            for gx, gy in self.goals:
+                min_dis = min(min_dis, abs(bx - gx) + abs(by - gy))
+            total_distance += min_dis
                 
         return total_distance
         
